@@ -110,6 +110,7 @@ function VisualFlowCanvas({
     const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
     const nodeRefs = useRef<Record<string, HTMLDivElement | null>>({});
     const [viewState, setViewState] = useState({ x: 0, y: 0, zoom: 1 });
+    const lastTouchDistanceRef = useRef<number>(0);
 
     useEffect(() => {
         const handleMouseMove = (e: MouseEvent) => {
@@ -136,12 +137,49 @@ function VisualFlowCanvas({
     }, [connectingSource, viewState.x, viewState.y, viewState.zoom]);
 
     const handleWheel = (e: React.WheelEvent) => {
-        if (e.ctrlKey || e.metaKey) {
-            const delta = e.deltaY * -0.002;
-            const newZoom = Math.min(Math.max(viewState.zoom + delta, 0.2), 2);
-            setViewState(prev => ({ ...prev, zoom: newZoom }));
+        // Allow zoom with regular scroll, or with ctrl/meta + scroll
+        const delta = e.deltaY * -0.002;
+        const newZoom = Math.min(Math.max(viewState.zoom + delta, 0.2), 2);
+        setViewState(prev => ({ ...prev, zoom: newZoom }));
+        e.preventDefault();
+    };
+
+    const handleTouchStart = (e: React.TouchEvent) => {
+        if (e.touches.length === 2) {
+            const touch1 = e.touches[0];
+            const touch2 = e.touches[1];
+            const distance = Math.sqrt(
+                Math.pow(touch2.clientX - touch1.clientX, 2) +
+                Math.pow(touch2.clientY - touch1.clientY, 2)
+            );
+            lastTouchDistanceRef.current = distance;
+        }
+    };
+
+    const handleTouchMove = (e: React.TouchEvent) => {
+        if (e.touches.length === 2) {
+            const touch1 = e.touches[0];
+            const touch2 = e.touches[1];
+            const distance = Math.sqrt(
+                Math.pow(touch2.clientX - touch1.clientX, 2) +
+                Math.pow(touch2.clientY - touch1.clientY, 2)
+            );
+
+            if (lastTouchDistanceRef.current > 0) {
+                const delta = (distance - lastTouchDistanceRef.current) * 0.005;
+                setViewState(prev => ({
+                    ...prev,
+                    zoom: Math.min(Math.max(prev.zoom + delta, 0.2), 2)
+                }));
+            }
+
+            lastTouchDistanceRef.current = distance;
             e.preventDefault();
         }
+    };
+
+    const handleTouchEnd = () => {
+        lastTouchDistanceRef.current = 0;
     };
 
     const renderEdges = () => {
@@ -216,6 +254,9 @@ function VisualFlowCanvas({
             className="flex-1 w-full h-full bg-[#08080c] relative overflow-hidden select-none"
             style={{ backgroundImage: 'radial-gradient(circle, #1a1a24 1px, transparent 1px)', backgroundSize: '50px 50px' }}
             onWheel={handleWheel}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
         >
             <style>{`
                 @keyframes dash { to { stroke-dashoffset: -8; } }

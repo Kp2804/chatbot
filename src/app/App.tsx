@@ -11,6 +11,7 @@ import { AnalyticsPage } from "./components/analytics/AnalyticsPage";
 import { ChatbotSelectionPage } from "./components/chat/ChatbotSelectionPage";
 import { ChatbotManagePage } from "./components/chat/ChatbotManagePage";
 import { EmbeddedChatPage } from "./components/chat/EmbeddedChatPage";
+import { ProfilePage } from "./components/profile/ProfilePage";
 
 const router = createBrowserRouter([
   {
@@ -38,6 +39,7 @@ const router = createBrowserRouter([
       { path: "faq", Component: FAQManager },
       { path: "faq/:id", Component: FAQEditor },
       { path: "analytics", Component: AnalyticsPage },
+      { path: "profile", Component: ProfilePage },
     ],
   },
 ]);
