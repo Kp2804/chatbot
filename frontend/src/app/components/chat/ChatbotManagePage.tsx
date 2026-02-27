@@ -18,8 +18,14 @@ export function ChatbotManagePage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [chatbot, setChatbot] = useState<Chatbot | null>(null);
+  const [blocked, setBlocked] = useState(false);
 
   useEffect(() => {
+    if (window.self !== window.top) {
+      setBlocked(true);
+      return;
+    }
+
     if (!chatbotId) {
       navigate("/app");
       return;
@@ -28,6 +34,17 @@ export function ChatbotManagePage() {
     localStorage.setItem("activeChatbotId", chatbotId);
     fetchChatbot(chatbotId);
   }, [chatbotId, navigate]);
+
+  if (blocked) {
+    return (
+      <div className="h-full flex items-center justify-center bg-[#08080c] text-gray-300 p-6 text-center">
+        <div className="max-w-md">
+          <h2 className="text-white text-lg font-semibold mb-2">Configuration disabled in embedded mode</h2>
+          <p className="text-sm text-gray-400">Manage chatbot settings only on the main chatbot website.</p>
+        </div>
+      </div>
+    );
+  }
 
   const fetchChatbot = async (id: string) => {
     try {

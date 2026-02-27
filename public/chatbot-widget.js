@@ -6,8 +6,8 @@
   const chatbotId = script?.getAttribute("data-chatbot-id");
   const appUrl = (script?.getAttribute("data-app-url") || window.location.origin).replace(/\/$/, "");
   const iconUrl = script?.getAttribute("data-icon-url") || "";
-  const panelWidth = script?.getAttribute("data-width") || "min(420px, 50vw)";
-  const panelHeight = script?.getAttribute("data-height") || "min(80vh, 720px)";
+  const panelWidth = script?.getAttribute("data-width") || "360px";
+  const panelHeight = script?.getAttribute("data-height") || "560px";
 
   if (!chatbotId) {
     console.error("[Chatbot Widget] Missing data-chatbot-id attribute");
@@ -27,10 +27,10 @@
   panel.style.right = "0";
   panel.style.bottom = "64px";
   panel.style.width = panelWidth;
-  panel.style.maxWidth = "50vw";
+  panel.style.maxWidth = "calc(100vw - 32px)";
   panel.style.minWidth = "320px";
   panel.style.height = panelHeight;
-  panel.style.maxHeight = "85vh";
+  panel.style.maxHeight = "calc(100vh - 96px)";
   panel.style.borderRadius = "16px";
   panel.style.overflow = "hidden";
   panel.style.boxShadow = "0 16px 40px rgba(0,0,0,0.35)";

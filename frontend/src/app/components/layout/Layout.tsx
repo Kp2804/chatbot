@@ -220,10 +220,22 @@ export function Layout() {
               </>
             )}
           </NavLink>
-          <button type="button" className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-gray-500 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-200 dark:hover:bg-white/5 transition-all ${collapsed ? "justify-center" : ""}`}>
-            <Settings className="w-[18px] h-[18px] flex-shrink-0" />
-            {!collapsed && <span style={{ fontSize: "0.875rem" }}>Settings</span>}
-          </button>
+          <NavLink
+            to="/app/settings"
+            className={({ isActive }) =>
+              `flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all ${isActive
+                ? "bg-violet-500/15 text-violet-400 border border-violet-500/20"
+                : "text-gray-500 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-200 dark:hover:bg-white/5"
+              } ${collapsed ? "justify-center" : ""}`
+            }
+          >
+            {({ isActive }) => (
+              <>
+                <Settings className={`w-[18px] h-[18px] flex-shrink-0 ${isActive ? "text-violet-400" : ""}`} />
+                {!collapsed && <span style={{ fontSize: "0.875rem", fontWeight: isActive ? 600 : 400 }}>Settings</span>}
+              </>
+            )}
+          </NavLink>
         </nav>
 
         {/* User */}
@@ -312,6 +324,10 @@ export function Layout() {
                     </button>
                     <button
                       type="button"
+                      onClick={() => {
+                        navigate("/app/settings");
+                        setShowUserMenu(false);
+                      }}
                       className="w-full flex items-center gap-2 px-4 py-2 text-gray-700 dark:text-gray-300 hover:text-black dark:hover:text-white hover:bg-gray-200 dark:hover:bg-white/5 transition-all text-sm"
                     >
                       <Settings className="w-4 h-4" />

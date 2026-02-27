@@ -179,6 +179,7 @@ export function ChatInterface({ embedded = false }: { embedded?: boolean }) {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const embeddedChatInitializedRef = useRef(false);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -216,6 +217,21 @@ export function ChatInterface({ embedded = false }: { embedded?: boolean }) {
   useEffect(() => {
     if (activeConvId) fetchMessages(activeConvId);
   }, [activeConvId]);
+
+  useEffect(() => {
+    if (!embedded || !user || !activeChatbotId || embeddedChatInitializedRef.current) return;
+
+    embeddedChatInitializedRef.current = true;
+
+    const initializeEmbeddedConversation = async () => {
+      const newConversationId = await handleCreateChat();
+      if (!newConversationId && conversations.length > 0) {
+        setActiveConvId(conversations[0].id);
+      }
+    };
+
+    initializeEmbeddedConversation();
+  }, [embedded, user, activeChatbotId, conversations]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -697,14 +713,16 @@ export function ChatInterface({ embedded = false }: { embedded?: boolean }) {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => activeChatbotId && navigate(`/app/chat/${activeChatbotId}/manage`)}
-              className="px-3 py-1.5 bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 border border-gray-300 dark:border-white/8 rounded-lg text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white flex items-center gap-1.5 transition-all"
-              style={{ fontSize: "0.75rem" }}
-            >
-              Manage Bot
-            </button>
+            {!embedded && (
+              <button
+                type="button"
+                onClick={() => activeChatbotId && navigate(`/app/chat/${activeChatbotId}/manage`)}
+                className="px-3 py-1.5 bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 border border-gray-300 dark:border-white/8 rounded-lg text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white flex items-center gap-1.5 transition-all"
+                style={{ fontSize: "0.75rem" }}
+              >
+                Manage Bot
+              </button>
+            )}
             <button
               type="button"
               onClick={() => fetchMessages(activeConvId!)}
@@ -735,13 +753,19 @@ export function ChatInterface({ embedded = false }: { embedded?: boolean }) {
                 <Bot className="w-8 h-8 text-violet-400" />
               </div>
               <h2 className="text-black dark:text-white text-xl font-bold mb-2">Welcome to Support Chat</h2>
-              <p className="text-gray-600 dark:text-gray-500 max-w-xs mb-6">Select an existing conversation from the sidebar or start a new one to get help.</p>
-              <button
-                onClick={handleCreateChat}
-                className="px-6 py-2.5 bg-violet-500 hover:bg-violet-600 text-white rounded-xl font-semibold transition-all shadow-lg shadow-violet-500/25"
-              >
-                Start New Chat
-              </button>
+              {embedded ? (
+                <p className="text-gray-600 dark:text-gray-500 max-w-xs mb-6">Preparing your support chat…</p>
+              ) : (
+                <>
+                  <p className="text-gray-600 dark:text-gray-500 max-w-xs mb-6">Select an existing conversation from the sidebar or start a new one to get help.</p>
+                  <button
+                    onClick={handleCreateChat}
+                    className="px-6 py-2.5 bg-violet-500 hover:bg-violet-600 text-white rounded-xl font-semibold transition-all shadow-lg shadow-violet-500/25"
+                  >
+                    Start New Chat
+                  </button>
+                </>
+              )}
             </div>
           ) : (
             <>
