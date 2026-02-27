@@ -8,6 +8,7 @@ import { supabase } from "../../../lib/supabase";
 export function FAQEditor() {
     const { id } = useParams();
     const navigate = useNavigate();
+    const activeChatbotId = localStorage.getItem("activeChatbotId");
     const [loading, setLoading] = useState(id !== 'new');
     const [question, setQuestion] = useState("");
     const [answer, setAnswer] = useState("");
@@ -17,18 +18,24 @@ export function FAQEditor() {
     const [isSaving, setIsSaving] = useState(false);
 
     useEffect(() => {
+        if (!activeChatbotId) {
+            navigate('/app');
+            return;
+        }
         if (id && id !== 'new') {
             fetchFAQ(id);
         }
-    }, [id]);
+    }, [id, activeChatbotId]);
 
     const fetchFAQ = async (faqId: string) => {
+        if (!activeChatbotId) return;
         try {
             setLoading(true);
             const { data, error } = await supabase
                 .from('faqs')
                 .select('*')
                 .eq('id', faqId)
+                .eq('chatbot_id', activeChatbotId)
                 .single();
 
             if (error) throw error;
@@ -60,6 +67,7 @@ export function FAQEditor() {
                 status,
                 tags,
                 user_id: user.id,
+                chatbot_id: activeChatbotId,
                 category: "General",
                 updated_at: new Date().toISOString(),
             };

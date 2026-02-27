@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Outlet, NavLink, useNavigate } from "react-router";
+import { Outlet, NavLink, useNavigate, useLocation } from "react-router";
 import {
   Bot,
   MessageSquare,
@@ -18,7 +18,7 @@ import {
 import { supabase } from "../../../lib/supabase";
 
 const navItems = [
-  { path: "/app", icon: MessageSquare, label: "Chat", exact: true },
+  { path: "/app/chat", icon: MessageSquare, label: "Chat" },
   { path: "/app/workflows", icon: GitBranch, label: "Workflows" },
   { path: "/app/faq", icon: HelpCircle, label: "FAQ Manager" },
 ];
@@ -27,6 +27,10 @@ export function Layout() {
   const [collapsed, setCollapsed] = useState(false);
   const [user, setUser] = useState<any>(null);
   const navigate = useNavigate();
+  const location = useLocation();
+  const activeChatbotId = localStorage.getItem("activeChatbotId");
+  const chatNavPath = activeChatbotId ? `/app/chat/${activeChatbotId}` : "/app";
+  const isSelectionScreen = location.pathname === "/app";
 
   useEffect(() => {
     const checkUser = async () => {
@@ -66,6 +70,16 @@ export function Layout() {
     await supabase.auth.signOut();
     navigate("/auth");
   };
+
+  if (isSelectionScreen) {
+    return (
+      <div className="w-full h-screen bg-[#0f0f13] text-white overflow-hidden dark">
+        <main className="h-full overflow-hidden">
+          <Outlet />
+        </main>
+      </div>
+    );
+  }
 
   return (
     // use `h-full` so the root container fills the height of html/body/#root
@@ -110,7 +124,7 @@ export function Layout() {
           {navItems.map((item) => (
             <NavLink
               key={item.path}
-              to={item.path}
+              to={item.path === "/app/chat" ? chatNavPath : item.path}
               end={item.exact}
               className={({ isActive }) =>
                 `flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group ${isActive
@@ -141,10 +155,22 @@ export function Layout() {
             </p>
           )}
           {collapsed && <div className="my-2 border-t border-white/8 mx-2" />}
-          <button type="button" className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-gray-500 hover:text-gray-300 hover:bg-white/5 transition-all ${collapsed ? "justify-center" : ""}`}>
-            <BarChart2 className="w-[18px] h-[18px] flex-shrink-0" />
-            {!collapsed && <span style={{ fontSize: "0.875rem" }}>Analytics</span>}
-          </button>
+          <NavLink
+            to="/app/analytics"
+            className={({ isActive }) =>
+              `flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all ${isActive
+                ? "bg-violet-500/15 text-violet-400 border border-violet-500/20"
+                : "text-gray-500 hover:text-gray-300 hover:bg-white/5"
+              } ${collapsed ? "justify-center" : ""}`
+            }
+          >
+            {({ isActive }) => (
+              <>
+                <BarChart2 className={`w-[18px] h-[18px] flex-shrink-0 ${isActive ? "text-violet-400" : ""}`} />
+                {!collapsed && <span style={{ fontSize: "0.875rem", fontWeight: isActive ? 600 : 400 }}>Analysis</span>}
+              </>
+            )}
+          </NavLink>
           <button type="button" className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-gray-500 hover:text-gray-300 hover:bg-white/5 transition-all ${collapsed ? "justify-center" : ""}`}>
             <Settings className="w-[18px] h-[18px] flex-shrink-0" />
             {!collapsed && <span style={{ fontSize: "0.875rem" }}>Settings</span>}

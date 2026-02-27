@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { useParams, useNavigate } from "react-router";
+import { useParams, useNavigate, useSearchParams } from "react-router";
 import * as Icons from "lucide-react";
 import {
     GitBranch, CheckCircle2, Zap, ArrowRight, X, AlertTriangle, RefreshCw
@@ -21,6 +21,12 @@ export interface WorkflowEdge {
     id: string;
     source: string;
     target: string;
+}
+
+interface SimulationMessage {
+    id: string;
+    role: 'user' | 'assistant';
+    content: string;
 }
 
 export interface Workflow {
@@ -359,11 +365,159 @@ function VisualFlowCanvas({
     );
 }
 
+function WorkflowVisualPreview({
+    nodes,
+    edges
+}: {
+    nodes: WorkflowNode[];
+    edges: WorkflowEdge[];
+}) {
+    return (
+        <div className="h-full overflow-y-auto bg-[#08080c] p-8">
+            <div className="flex items-center justify-between mb-6 px-1">
+                <h4 className="text-white font-black uppercase tracking-[0.24em] text-[0.65rem]">Flow Structure</h4>
+                <p className="text-gray-600 text-xs font-bold uppercase tracking-widest">Visual Preview</p>
+            </div>
+
+            <div className="flex gap-6 overflow-x-auto pb-10 snap-x snap-mandatory no-scrollbar scroll-smooth">
+                {nodes.map((node, index) => (
+                    <div key={node.id} className="flex-shrink-0 w-80 snap-center">
+                        <div className="bg-white/[0.02] border border-white/10 rounded-[2.5rem] p-6 hover:border-violet-500/40 transition-all duration-700 transform hover:-translate-y-1.5 group/node">
+                            <div className="flex items-center justify-between mb-6">
+                                <span className="text-[0.6rem] font-black text-gray-800 uppercase tracking-widest leading-none">
+                                    {node.type === 'trigger' ? 'TRIGGER' : `NODE: ${index.toString().padStart(2, '0')}`}
+                                </span>
+                                <div className="w-10 h-10 rounded-2xl bg-white/5 flex items-center justify-center group-hover/node:rotate-12 transition-transform">
+                                    <Icons.MessageSquare className="w-5 h-5 text-violet-500/70" />
+                                </div>
+                            </div>
+
+                            <h6 className="text-white font-black mb-3 truncate pr-4 text-base tracking-tight">{node.name || 'Untitled Node'}</h6>
+                            <p className="text-gray-500 text-xs line-clamp-3 mb-6 leading-relaxed font-medium">{node.message || 'No message configured.'}</p>
+
+                            <div className="space-y-2">
+                                {edges.filter((edge) => edge.source === node.id).map((edge) => {
+                                    const targetNode = nodes.find((item) => item.id === edge.target);
+                                    return (
+                                        <div key={edge.id} className="flex items-center justify-between px-4 py-2.5 bg-black/40 rounded-2xl border border-white/5 group/opt">
+                                            <span className="text-[0.65rem] font-bold text-gray-500 truncate group-hover/opt:text-white transition-colors">
+                                                {targetNode?.name || 'End'}
+                                            </span>
+                                            <ArrowRight className="w-3.5 h-3.5 text-violet-600/30 group-hover/opt:text-violet-600 transition-colors" />
+                                        </div>
+                                    );
+                                })}
+
+                                {!edges.some((edge) => edge.source === node.id) && (
+                                    <div className="text-center py-3 text-gray-800 text-[0.6rem] font-black uppercase tracking-[0.2em]">End of Flow</div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                ))}
+            </div>
+
+            {nodes.length === 0 && (
+                <div className="rounded-3xl border border-white/10 bg-white/[0.02] p-10 text-center">
+                    <p className="text-gray-500 text-sm font-medium">No nodes to preview yet.</p>
+                </div>
+            )}
+        </div>
+    );
+}
+
+function WorkflowSimulation({
+    messages,
+    options,
+    running,
+    onStart,
+    onReset,
+    onSelectOption
+}: {
+    messages: SimulationMessage[];
+    options: Array<{ edgeId: string; label: string }>;
+    running: boolean;
+    onStart: () => void;
+    onReset: () => void;
+    onSelectOption: (edgeId: string) => void;
+}) {
+    return (
+        <div className="h-full overflow-y-auto bg-[#08080c] p-8">
+            <div className="flex items-center justify-between mb-6">
+                <div>
+                    <h4 className="text-white font-black uppercase tracking-[0.24em] text-[0.65rem]">Simulation</h4>
+                    <p className="text-gray-600 text-xs font-bold uppercase tracking-widest mt-1">Test your flow before saving</p>
+                </div>
+                <div className="flex items-center gap-2">
+                    {!running ? (
+                        <button
+                            type="button"
+                            onClick={onStart}
+                            className="px-4 py-2.5 bg-violet-600 hover:bg-violet-500 text-white rounded-xl font-bold text-xs uppercase tracking-wider flex items-center gap-2"
+                        >
+                            <Icons.Play className="w-4 h-4" /> Start
+                        </button>
+                    ) : (
+                        <button
+                            type="button"
+                            onClick={onReset}
+                            className="px-4 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 rounded-xl font-bold text-xs uppercase tracking-wider flex items-center gap-2"
+                        >
+                            <Icons.RotateCcw className="w-4 h-4" /> Reset
+                        </button>
+                    )}
+                </div>
+            </div>
+
+            <div className="bg-white/[0.02] border border-white/10 rounded-3xl p-5 min-h-[320px] flex flex-col">
+                {messages.length === 0 ? (
+                    <div className="flex-1 flex items-center justify-center text-gray-600 text-sm">
+                        Start simulation to run this workflow.
+                    </div>
+                ) : (
+                    <div className="space-y-3 flex-1 overflow-y-auto pr-1">
+                        {messages.map((message) => (
+                            <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                <div className={`max-w-[80%] px-4 py-2.5 rounded-2xl text-sm ${message.role === 'user'
+                                    ? 'bg-violet-600 text-white rounded-tr-md'
+                                    : 'bg-white/8 border border-white/10 text-gray-200 rounded-tl-md'
+                                    }`}>
+                                    {message.content}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+
+            {running && options.length > 0 && (
+                <div className="mt-4 flex flex-wrap gap-2">
+                    {options.map((option) => (
+                        <button
+                            key={option.edgeId}
+                            type="button"
+                            onClick={() => onSelectOption(option.edgeId)}
+                            className="px-4 py-2 bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/30 rounded-full text-violet-300 text-xs font-medium"
+                        >
+                            {option.label}
+                        </button>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
 /* ─── WorkflowEditor Page ─── */
 
 export function WorkflowEditor() {
     const { id } = useParams();
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+    const requestedPanel = searchParams.get('panel');
+    const initialPanel: 'builder' | 'preview' | 'simulate' =
+        requestedPanel === 'simulate' ? 'simulate' : requestedPanel === 'preview' ? 'preview' : 'builder';
+    const activeChatbotId = localStorage.getItem("activeChatbotId");
     const [loading, setLoading] = useState(id !== 'new');
     const [name, setName] = useState("");
     const [description, setDescription] = useState("");
@@ -372,8 +526,16 @@ export function WorkflowEditor() {
     const [error, setError] = useState("");
     const [isSaving, setIsSaving] = useState(false);
     const [originalWorkflow, setOriginalWorkflow] = useState<Workflow | null>(null);
+    const [activePanel, setActivePanel] = useState<'builder' | 'preview' | 'simulate'>(initialPanel);
+    const [simulationMessages, setSimulationMessages] = useState<SimulationMessage[]>([]);
+    const [simulationCurrentNodeId, setSimulationCurrentNodeId] = useState<string | null>(null);
+    const [simulationRunning, setSimulationRunning] = useState(false);
 
     useEffect(() => {
+        if (!activeChatbotId) {
+            navigate('/app');
+            return;
+        }
         if (id && id !== 'new') {
             fetchWorkflow(id);
         } else {
@@ -386,15 +548,17 @@ export function WorkflowEditor() {
                 position: { x: 100, y: 200 },
             }]);
         }
-    }, [id]);
+    }, [id, activeChatbotId]);
 
     const fetchWorkflow = async (workflowId: string) => {
+        if (!activeChatbotId) return;
         try {
             setLoading(true);
             const { data, error } = await supabase
                 .from('workflows')
                 .select('*')
                 .eq('id', workflowId)
+                .eq('chatbot_id', activeChatbotId)
                 .single();
 
             if (error) throw error;
@@ -447,6 +611,73 @@ export function WorkflowEditor() {
         setEdges(prev => prev.filter(e => e.id !== id));
     };
 
+    const startSimulation = () => {
+        const triggerNode = nodes.find((node) => node.type === 'trigger') || nodes[0];
+        if (!triggerNode) return;
+
+        setSimulationRunning(true);
+        setSimulationCurrentNodeId(triggerNode.id);
+        setSimulationMessages([
+            {
+                id: `sim_${Date.now()}`,
+                role: 'assistant',
+                content: triggerNode.message || 'No trigger message configured.'
+            }
+        ]);
+    };
+
+    const resetSimulation = () => {
+        setSimulationRunning(false);
+        setSimulationCurrentNodeId(null);
+        setSimulationMessages([]);
+    };
+
+    const handleSimulationOptionSelect = (edgeId: string) => {
+        const edge = edges.find((item) => item.id === edgeId);
+        if (!edge) return;
+
+        const targetNode = nodes.find((node) => node.id === edge.target);
+
+        setSimulationMessages((prev) => {
+            const next = [
+                ...prev,
+                {
+                    id: `sim_user_${Date.now()}`,
+                    role: 'user' as const,
+                    content: targetNode?.name || 'Next'
+                }
+            ];
+
+            if (targetNode) {
+                next.push({
+                    id: `sim_bot_${Date.now()}_${Math.random()}`,
+                    role: 'assistant',
+                    content: targetNode.message || 'No message configured.'
+                });
+                setSimulationCurrentNodeId(targetNode.id);
+            } else {
+                next.push({
+                    id: `sim_end_${Date.now()}_${Math.random()}`,
+                    role: 'assistant',
+                    content: 'End of workflow.'
+                });
+                setSimulationRunning(false);
+                setSimulationCurrentNodeId(null);
+            }
+
+            return next;
+        });
+    };
+
+    const simulationOptions = simulationCurrentNodeId
+        ? edges
+            .filter((edge) => edge.source === simulationCurrentNodeId)
+            .map((edge) => ({
+                edgeId: edge.id,
+                label: nodes.find((node) => node.id === edge.target)?.name || 'End Session'
+            }))
+        : [];
+
     const handleSave = async () => {
         if (!name.trim()) {
             setError("Please enter a name for your workflow.");
@@ -468,6 +699,7 @@ export function WorkflowEditor() {
                 name: name.trim(),
                 description: description.trim(),
                 user_id: user.id,
+                chatbot_id: activeChatbotId,
                 steps: { nodes, edges },
                 updated_at: new Date().toISOString(),
                 status: originalWorkflow?.status || "active",
@@ -517,6 +749,29 @@ export function WorkflowEditor() {
                     </div>
                 </div>
                 <div className="flex items-center gap-3">
+                    <div className="flex items-center bg-white/5 border border-white/10 rounded-xl p-1">
+                        <button
+                            type="button"
+                            onClick={() => setActivePanel('builder')}
+                            className={`px-3 py-2 rounded-lg text-xs font-bold transition-all ${activePanel === 'builder' ? 'bg-violet-600 text-white' : 'text-gray-300 hover:bg-white/10'}`}
+                        >
+                            Builder
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setActivePanel('preview')}
+                            className={`px-3 py-2 rounded-lg text-xs font-bold transition-all ${activePanel === 'preview' ? 'bg-violet-600 text-white' : 'text-gray-300 hover:bg-white/10'}`}
+                        >
+                            Preview
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setActivePanel('simulate')}
+                            className={`px-3 py-2 rounded-lg text-xs font-bold transition-all ${activePanel === 'simulate' ? 'bg-violet-600 text-white' : 'text-gray-300 hover:bg-white/10'}`}
+                        >
+                            Simulate
+                        </button>
+                    </div>
                     <button
                         onClick={() => navigate('/app/workflows')}
                         className="px-6 py-2.5 text-gray-400 hover:text-white font-bold transition-all"
@@ -542,15 +797,28 @@ export function WorkflowEditor() {
             )}
 
             <div className="flex-1 relative overflow-hidden">
-                <VisualFlowCanvas
-                    nodes={nodes}
-                    edges={edges}
-                    updateNode={updateNode}
-                    addNode={addNode}
-                    removeNode={removeNode}
-                    addEdge={addEdge}
-                    removeEdge={removeEdge}
-                />
+                {activePanel === 'builder' ? (
+                    <VisualFlowCanvas
+                        nodes={nodes}
+                        edges={edges}
+                        updateNode={updateNode}
+                        addNode={addNode}
+                        removeNode={removeNode}
+                        addEdge={addEdge}
+                        removeEdge={removeEdge}
+                    />
+                ) : activePanel === 'preview' ? (
+                    <WorkflowVisualPreview nodes={nodes} edges={edges} />
+                ) : (
+                    <WorkflowSimulation
+                        messages={simulationMessages}
+                        options={simulationOptions}
+                        running={simulationRunning}
+                        onStart={startSimulation}
+                        onReset={resetSimulation}
+                        onSelectOption={handleSimulationOptionSelect}
+                    />
+                )}
 
             </div>
         </div>

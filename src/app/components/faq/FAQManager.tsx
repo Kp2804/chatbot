@@ -101,9 +101,11 @@ function ConfirmModal({ title, message, onConfirm, onCancel }: ConfirmModalProps
 
 export function FAQManager() {
   const navigate = useNavigate();
+  const activeChatbotId = localStorage.getItem("activeChatbotId");
   const [faqList, setFaqList] = useState<FAQ[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "published" | "draft">("all");
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
@@ -112,15 +114,21 @@ export function FAQManager() {
   const importRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    if (!activeChatbotId) {
+      navigate('/app');
+      return;
+    }
     fetchFAQs();
-  }, []);
+  }, [activeChatbotId]);
 
   const fetchFAQs = async () => {
+    if (!activeChatbotId) return;
     try {
       setLoading(true);
       const { data, error } = await supabase
         .from('faqs')
         .select('*')
+        .eq('chatbot_id', activeChatbotId)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -138,11 +146,12 @@ export function FAQManager() {
   };
 
   const filtered = faqList.filter((f) => {
+    const matchStatus = statusFilter === "all" || f.status === statusFilter;
     const matchSearch =
       f.question.toLowerCase().includes(search.toLowerCase()) ||
       f.answer.toLowerCase().includes(search.toLowerCase()) ||
       f.tags.some((t) => t.toLowerCase().includes(search.toLowerCase()));
-    return matchSearch;
+    return matchStatus && matchSearch;
   });
 
   const toggleFeatured = async (id: string, current: boolean) => {
@@ -183,6 +192,7 @@ export function FAQManager() {
 
       const dup = {
         user_id: user.id,
+        chatbot_id: activeChatbotId,
         question: `${faq.question} (Copy)`,
         answer: faq.answer,
         tags: faq.tags,
@@ -259,6 +269,7 @@ export function FAQManager() {
         const withNewIds = imported.map((f, i) => ({
           ...f,
           id: `imp_${Date.now()}_${i}`,
+          chatbot_id: activeChatbotId,
           created_at: f.created_at || now,
           updated_at: now,
         }));
@@ -339,21 +350,48 @@ export function FAQManager() {
         {/* Stats */}
         <div className="grid grid-cols-4 gap-4 mb-6">
           {[
-            { label: "Total FAQs", value: faqList.length.toString(), icon: HelpCircle, color: "text-violet-400", bg: "bg-violet-500/10" },
-            { label: "Published", value: publishedCount.toString(), icon: CheckCircle2, color: "text-emerald-400", bg: "bg-emerald-500/10" },
-            { label: "Drafts", value: draftCount.toString(), icon: Edit2, color: "text-amber-400", bg: "bg-amber-500/10" },
+            { label: "All", value: faqList.length.toString(), icon: HelpCircle, color: "text-violet-400", bg: "bg-violet-500/10", filter: "all" as const },
+            { label: "Active", value: publishedCount.toString(), icon: CheckCircle2, color: "text-emerald-400", bg: "bg-emerald-500/10", filter: "published" as const },
+            { label: "Draft", value: draftCount.toString(), icon: Edit2, color: "text-amber-400", bg: "bg-amber-500/10", filter: "draft" as const },
             { label: "Total Views", value: totalViews.toLocaleString(), icon: Eye, color: "text-blue-400", bg: "bg-blue-500/10" },
-          ].map((stat) => (
-            <div key={stat.label} className="bg-white/5 border border-white/8 rounded-xl p-4 flex items-center gap-3">
-              <div className={`w-10 h-10 ${stat.bg} rounded-xl flex items-center justify-center`}>
-                <stat.icon className={`w-5 h-5 ${stat.color}`} />
+          ].map((stat) => {
+            const isFilterCard = "filter" in stat;
+            const isActive = isFilterCard && statusFilter === stat.filter;
+
+            if (isFilterCard) {
+              return (
+                <button
+                  key={stat.label}
+                  type="button"
+                  onClick={() => setStatusFilter(stat.filter as "all" | "published" | "draft")}
+                  className={`bg-white/5 border rounded-xl p-4 flex items-center gap-3 text-left transition-all ${isActive
+                    ? "border-violet-500/40 bg-violet-500/10"
+                    : "border-white/8 hover:border-white/20"
+                    }`}
+                >
+                  <div className={`w-10 h-10 ${stat.bg} rounded-xl flex items-center justify-center`}>
+                    <stat.icon className={`w-5 h-5 ${stat.color}`} />
+                  </div>
+                  <div>
+                    <div className={stat.color} style={{ fontSize: "1.3rem", fontWeight: 700 }}>{stat.value}</div>
+                    <div className="text-gray-500" style={{ fontSize: "0.72rem" }}>{stat.label}</div>
+                  </div>
+                </button>
+              );
+            }
+
+            return (
+              <div key={stat.label} className="bg-white/5 border border-white/8 rounded-xl p-4 flex items-center gap-3">
+                <div className={`w-10 h-10 ${stat.bg} rounded-xl flex items-center justify-center`}>
+                  <stat.icon className={`w-5 h-5 ${stat.color}`} />
+                </div>
+                <div>
+                  <div className={stat.color} style={{ fontSize: "1.3rem", fontWeight: 700 }}>{stat.value}</div>
+                  <div className="text-gray-500" style={{ fontSize: "0.72rem" }}>{stat.label}</div>
+                </div>
               </div>
-              <div>
-                <div className={stat.color} style={{ fontSize: "1.3rem", fontWeight: 700 }}>{stat.value}</div>
-                <div className="text-gray-500" style={{ fontSize: "0.72rem" }}>{stat.label}</div>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {/* Search */}
@@ -380,6 +418,7 @@ export function FAQManager() {
           <span className="text-gray-600" style={{ fontSize: "0.78rem" }}>
             Showing {filtered.length} {filtered.length === 1 ? "result" : "results"}
             {search && ` for "${search}"`}
+            {statusFilter !== "all" && ` in ${statusFilter === "published" ? "active" : "draft"}`}
           </span>
         </div>
 

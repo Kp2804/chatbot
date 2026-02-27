@@ -3,10 +3,11 @@ import * as Icons from "lucide-react";
 import {
   Send, Bot, Plus, Search, MoreVertical, Paperclip,
   Smile, Mic, ThumbsUp, ThumbsDown, Copy, RefreshCw,
-  Sparkles, Clock, Check, Star, Trash2, HelpCircle, Zap,
+  Sparkles, Clock, Check, Star, Trash2, HelpCircle,
   ArrowRight, Layout
 } from "lucide-react";
 import { supabase } from "../../../lib/supabase";
+import { useNavigate, useParams } from "react-router";
 
 interface Message {
   id: string;
@@ -17,6 +18,7 @@ interface Message {
 
 interface Conversation {
   id: string;
+  chatbot_id: string;
   title: string;
   preview: string;
   starred: boolean;
@@ -122,7 +124,45 @@ function renderContent(content: string) {
   });
 }
 
-export function ChatInterface() {
+function toTitleCase(text: string) {
+  return text
+    .split(" ")
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function deriveConversationTitle(content: string) {
+  const normalized = content.toLowerCase();
+
+  const topicMap: Array<{ title: string; keywords: string[] }> = [
+    { title: "Business Inquiry", keywords: ["business", "company", "proposal", "partnership", "strategy", "revenue"] },
+    { title: "Sales Question", keywords: ["price", "pricing", "quote", "buy", "purchase", "plan"] },
+    { title: "Support Request", keywords: ["issue", "problem", "error", "help", "support", "fix"] },
+    { title: "Order & Shipping", keywords: ["order", "invoice", "shipment", "shipping", "delivery", "tracking"] },
+    { title: "Account Access", keywords: ["login", "signin", "password", "account", "access", "otp"] },
+    { title: "Product Information", keywords: ["feature", "product", "service", "details", "info", "overview"] },
+  ];
+
+  const matched = topicMap.find((topic) => topic.keywords.some((keyword) => normalized.includes(keyword)));
+  if (matched) return matched.title;
+
+  const cleaned = content
+    .replace(/[^a-zA-Z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!cleaned) return "New Conversation";
+
+  const short = cleaned.split(" ").slice(0, 6).join(" ");
+  return toTitleCase(short);
+}
+
+export function ChatInterface({ embedded = false }: { embedded?: boolean }) {
+  const navigate = useNavigate();
+  const { chatbotId } = useParams();
+  const activeChatbotId = chatbotId || null;
+  const PAGE_SIZE = 1000;
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConvId, setActiveConvId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -134,6 +174,8 @@ export function ChatInterface() {
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [activeWorkflow, setActiveWorkflow] = useState<Workflow | null>(null);
   const [currentStepId, setCurrentStepId] = useState<string | null>(null);
+  const [totalChatsAllTime, setTotalChatsAllTime] = useState(0);
+  const [resolvedRate, setResolvedRate] = useState(0);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -142,12 +184,34 @@ export function ChatInterface() {
     supabase.auth.getUser().then(({ data: { user } }) => {
       setUser(user);
       if (user) {
+        if (!activeChatbotId) {
+          navigate('/app');
+          return;
+        }
         fetchConversations();
         fetchFAQs();
         fetchWorkflows();
       }
     });
-  }, []);
+  }, [activeChatbotId, navigate]);
+
+  useEffect(() => {
+    if (activeChatbotId) {
+      localStorage.setItem("activeChatbotId", activeChatbotId);
+    }
+  }, [activeChatbotId]);
+
+  useEffect(() => {
+    if (activeChatbotId) {
+      fetchConversations();
+      fetchFAQs();
+      fetchWorkflows();
+      setActiveConvId(null);
+      setMessages([]);
+      setActiveWorkflow(null);
+      setCurrentStepId(null);
+    }
+  }, [activeChatbotId]);
 
   useEffect(() => {
     if (activeConvId) fetchMessages(activeConvId);
@@ -157,12 +221,110 @@ export function ChatInterface() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isTyping]);
 
+  const updateConversationMetadata = async (conversationId: string, previewContent: string) => {
+    const currentConversation = conversations.find((item) => item.id === conversationId);
+    const shouldRename = !currentConversation?.title || currentConversation.title.toLowerCase() === "new conversation";
+
+    const payload: any = {
+      preview: previewContent,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (shouldRename) {
+      payload.title = deriveConversationTitle(previewContent);
+    }
+
+    await supabase.from('conversations').update(payload).eq('id', conversationId);
+
+    setConversations((prev) =>
+      prev.map((conv) =>
+        conv.id === conversationId
+          ? {
+            ...conv,
+            preview: previewContent,
+            title: shouldRename ? payload.title : conv.title,
+            updated_at: payload.updated_at,
+          }
+          : conv
+      )
+    );
+  };
+
+  const fetchAllTimeChatStats = async () => {
+    if (!activeChatbotId) {
+      setTotalChatsAllTime(0);
+      setResolvedRate(0);
+      return;
+    }
+
+    const { data: conversationRows, error: conversationsError } = await supabase
+      .from('conversations')
+      .select('id')
+      .eq('chatbot_id', activeChatbotId);
+
+    if (conversationsError) {
+      console.error("Error fetching all-time conversations:", conversationsError.message);
+      return;
+    }
+
+    const conversationIds = new Set((conversationRows || []).map((item: any) => item.id));
+    const totalConversationCount = conversationIds.size;
+    setTotalChatsAllTime(totalConversationCount);
+
+    if (!totalConversationCount) {
+      setResolvedRate(0);
+      return;
+    }
+
+    const resolvedConversationIds = new Set<string>();
+    let from = 0;
+
+    while (true) {
+      const { data, error } = await supabase
+        .from('messages')
+        .select('conversation_id')
+        .eq('role', 'assistant')
+        .range(from, from + PAGE_SIZE - 1);
+
+      if (error) {
+        console.error("Error fetching all-time resolution stats:", error.message);
+        return;
+      }
+
+      if (!data || data.length === 0) {
+        break;
+      }
+
+      for (const item of data) {
+        if (conversationIds.has(item.conversation_id)) {
+          resolvedConversationIds.add(item.conversation_id);
+        }
+      }
+
+      if (data.length < PAGE_SIZE) {
+        break;
+      }
+
+      from += PAGE_SIZE;
+    }
+
+    const rate = Math.round((resolvedConversationIds.size / totalConversationCount) * 100);
+    setResolvedRate(rate);
+  };
+
   const fetchConversations = async () => {
+    if (!activeChatbotId) return;
+
     const { data, error } = await supabase
       .from('conversations')
       .select('*')
+      .eq('chatbot_id', activeChatbotId)
       .order('updated_at', { ascending: false });
-    if (!error) setConversations(data || []);
+    if (!error) {
+      const list = data || [];
+      setConversations(list);
+      fetchAllTimeChatStats();
+    }
   };
 
   const fetchMessages = async (convId: string) => {
@@ -175,18 +337,22 @@ export function ChatInterface() {
   };
 
   const fetchFAQs = async () => {
+    if (!activeChatbotId) return;
     const { data, error } = await supabase
       .from('faqs')
       .select('id, question, answer')
+      .eq('chatbot_id', activeChatbotId)
       .eq('status', 'published')
       .limit(5);
     if (!error) setFaqs(data || []);
   };
 
   const fetchWorkflows = async () => {
+    if (!activeChatbotId) return;
     const { data, error } = await supabase
       .from('workflows')
-      .select('id, name, nodes, edges, steps, status');
+      .select('*')
+      .eq('chatbot_id', activeChatbotId);
 
     if (error) console.error("Error fetching workflows:", error);
 
@@ -202,7 +368,7 @@ export function ChatInterface() {
   };
 
   const handleCreateChat = async () => {
-    if (!user) {
+    if (!user || !activeChatbotId) {
       console.error("User not found during chat creation");
       return;
     }
@@ -210,6 +376,7 @@ export function ChatInterface() {
       .from('conversations')
       .insert([{
         user_id: user.id,
+        chatbot_id: activeChatbotId,
         title: "New Conversation",
         preview: "No messages yet",
         updated_at: new Date().toISOString()
@@ -224,6 +391,7 @@ export function ChatInterface() {
 
     if (data) {
       setConversations(prev => [data, ...prev]);
+      fetchAllTimeChatStats();
       setActiveConvId(data.id);
 
       // Add default greeting message
@@ -273,6 +441,7 @@ export function ChatInterface() {
     }
 
     setConversations(prev => prev.filter(c => c.id !== id));
+    fetchAllTimeChatStats();
     if (activeConvId === id) {
       setActiveConvId(null);
       setMessages([]);
@@ -318,11 +487,7 @@ export function ChatInterface() {
     setMessages(prev => [...prev, savedUserMsg]);
     setIsTyping(true);
 
-    // Update conversation preview
-    await supabase.from('conversations').update({
-      preview: content,
-      updated_at: new Date().toISOString()
-    }).eq('id', activeConvId);
+    await updateConversationMetadata(activeConvId, content);
 
     // Check for workflow triggers
     const triggerWords = ["hi", "hello", "hey", "start", "welcome"];
@@ -360,6 +525,7 @@ export function ChatInterface() {
     const userMsg = { conversation_id: activeConvId, role: "user", content: targetNode?.name || "Next" };
     const { data: savedUserMsg } = await supabase.from('messages').insert([userMsg]).select().single();
     if (savedUserMsg) setMessages(prev => [...prev, savedUserMsg]);
+    await updateConversationMetadata(activeConvId, targetNode?.name || "Next");
 
     setIsTyping(true);
 
@@ -401,8 +567,7 @@ export function ChatInterface() {
 
     setIsTyping(true);
 
-    // Update preview
-    await supabase.from('conversations').update({ preview: faq.question }).eq('id', currentConvId);
+    await updateConversationMetadata(currentConvId, faq.question);
 
     // Send answer
     setTimeout(async () => {
@@ -415,7 +580,6 @@ export function ChatInterface() {
   };
 
   const activeConv = conversations.find(c => c.id === activeConvId);
-
   const filteredConvs = conversations.filter(
     (c) =>
       c.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -425,6 +589,7 @@ export function ChatInterface() {
   return (
     <div className="flex h-full overflow-hidden">
       {/* Conversations Sidebar */}
+      {!embedded && (
       <div className="w-72 flex-shrink-0 border-r border-white/8 bg-[#12121a] flex flex-col overflow-hidden">
         <div className="p-4 border-b border-white/8 flex-shrink-0">
           <div className="flex items-center justify-between mb-3">
@@ -503,16 +668,17 @@ export function ChatInterface() {
         <div className="p-4 border-t border-white/8 flex-shrink-0">
           <div className="grid grid-cols-2 gap-2">
             <div className="bg-white/5 rounded-xl p-3 text-center">
-              <div className="text-violet-400" style={{ fontSize: "1.1rem", fontWeight: 700 }}>248</div>
+              <div className="text-violet-400" style={{ fontSize: "1.1rem", fontWeight: 700 }}>{totalChatsAllTime}</div>
               <div className="text-gray-600" style={{ fontSize: "0.65rem" }}>Total Chats</div>
             </div>
             <div className="bg-white/5 rounded-xl p-3 text-center">
-              <div className="text-emerald-400" style={{ fontSize: "1.1rem", fontWeight: 700 }}>94%</div>
+              <div className="text-emerald-400" style={{ fontSize: "1.1rem", fontWeight: 700 }}>{resolvedRate}%</div>
               <div className="text-gray-600" style={{ fontSize: "0.65rem" }}>Resolved</div>
             </div>
           </div>
         </div>
       </div>
+      )}
 
       {/* Chat Area */}
       <div className="flex-1 flex flex-col overflow-hidden">
@@ -531,6 +697,14 @@ export function ChatInterface() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => activeChatbotId && navigate(`/app/chat/${activeChatbotId}/manage`)}
+              className="px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/8 rounded-lg text-gray-400 hover:text-white flex items-center gap-1.5 transition-all"
+              style={{ fontSize: "0.75rem" }}
+            >
+              Manage Bot
+            </button>
             <button
               type="button"
               onClick={() => fetchMessages(activeConvId!)}
@@ -600,23 +774,28 @@ export function ChatInterface() {
                       }`} style={{ fontSize: "0.875rem", lineHeight: 1.65 }}>
                       {renderContent(msg.content)}
 
-                      {/* Workflow Triggers - Shown only in the first assistant message */}
-                      {msg.role === "assistant" && msg.id === messages.filter(m => m.role === "assistant")[0]?.id && workflows.length > 0 && (
-                        <div className="mt-4 flex flex-wrap gap-2 pt-3 border-t border-white/10">
+                    </div>
+
+                    {/* Workflow Triggers - Shown only in the first assistant message */}
+                    {msg.role === "assistant" && msg.id === messages.filter(m => m.role === "assistant")[0]?.id && workflows.length > 0 && (
+                      <div className="mt-2 w-full">
+                        <p className="text-gray-500 mb-2" style={{ fontSize: "0.62rem", fontWeight: 700, letterSpacing: "0.06em" }}>
+                          START A WORKFLOW:
+                        </p>
+                        <div className="flex flex-wrap gap-2">
                           {workflows.map((w) => (
                             <button
                               key={w.id}
                               onClick={() => startWorkflow(w)}
-                              className="px-4 py-2.5 bg-violet-600 hover:bg-violet-500 text-white rounded-xl transition-all font-bold uppercase tracking-wider flex items-center gap-2 shadow-lg shadow-violet-500/20 active:scale-95"
-                              style={{ fontSize: "0.72rem" }}
+                              className="px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-gray-200 transition-all font-semibold"
+                              style={{ fontSize: "0.68rem" }}
                             >
-                              <Zap className="w-3.5 h-3.5" />
                               {w.nodes?.find((n: any) => n.type === 'trigger')?.name || w.name}
                             </button>
                           ))}
                         </div>
-                      )}
-                    </div>
+                      </div>
+                    )}
 
                     {/* Workflow Buttons - Grid or List Layout */}
                     {msg.role === "assistant" &&

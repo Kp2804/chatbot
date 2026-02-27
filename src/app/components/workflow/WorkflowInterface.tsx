@@ -141,6 +141,8 @@ function ConfirmModal({ title, message, onConfirm, onCancel }: { title: string; 
 
 export function WorkflowInterface() {
   const navigate = useNavigate();
+  const activeChatbotId = localStorage.getItem("activeChatbotId");
+  const previewSectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -148,17 +150,24 @@ export function WorkflowInterface() {
   const [search, setSearch] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: "success" | "info" } | null>(null);
+  const [previewModeByWorkflow, setPreviewModeByWorkflow] = useState<Record<string, "structure" | "visual">>({});
 
   useEffect(() => {
+    if (!activeChatbotId) {
+      navigate('/app');
+      return;
+    }
     fetchWorkflows();
-  }, []);
+  }, [activeChatbotId]);
 
   const fetchWorkflows = async () => {
+    if (!activeChatbotId) return;
     try {
       setLoading(true);
       const { data, error } = await supabase
         .from('workflows')
         .select('*')
+        .eq('chatbot_id', activeChatbotId)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -191,6 +200,7 @@ export function WorkflowInterface() {
 
       const dup = {
         user_id: user.id,
+        chatbot_id: activeChatbotId,
         name: `${wf.name} (Clone)`,
         description: wf.description,
         status: "draft",
@@ -254,6 +264,26 @@ export function WorkflowInterface() {
   const avgSuccess = workflows.length > 0
     ? (workflows.reduce((sum, w) => sum + (w.success_rate || 0), 0) / workflows.length).toFixed(1)
     : "0";
+
+  const handleVisualPreview = (workflowId: string) => {
+    const isOpen = expandedId === workflowId;
+    setExpandedId(isOpen ? null : workflowId);
+
+    if (!isOpen) {
+      window.setTimeout(() => {
+        previewSectionRefs.current[workflowId]?.scrollIntoView({
+          behavior: "smooth",
+          block: "nearest"
+        });
+      }, 50);
+    }
+  };
+
+  const getPreviewMode = (workflowId: string) => previewModeByWorkflow[workflowId] || "structure";
+
+  const setPreviewMode = (workflowId: string, mode: "structure" | "visual") => {
+    setPreviewModeByWorkflow((prev) => ({ ...prev, [workflowId]: mode }));
+  };
 
   return (
     <div className="h-full overflow-y-auto bg-[#08080c]">
@@ -354,10 +384,10 @@ export function WorkflowInterface() {
                       </div>
                       <button
                         type="button"
-                        onClick={() => setExpandedId(expandedId === workflow.id ? null : workflow.id)}
+                        onClick={() => handleVisualPreview(workflow.id)}
                         className="flex items-center gap-2.5 px-6 py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-[1.2rem] text-white transition-all font-black text-xs uppercase tracking-widest"
                       >
-                        {expandedId === workflow.id ? "Contract" : "Expand Matrix"}
+                        {expandedId === workflow.id ? "Hide Preview" : "Visual Preview"}
                         <ChevronRight className={`w-4 h-4 transition-transform duration-500 ${expandedId === workflow.id ? 'rotate-90' : ''}`} />
                       </button>
                     </div>
@@ -378,43 +408,141 @@ export function WorkflowInterface() {
                 </div>
 
                 {expandedId === workflow.id && (
-                  <div className="border-t border-white/5 bg-black/60 p-10 animate-in fade-in slide-in-from-top-4 duration-500">
+                  <div
+                    ref={(el) => {
+                      previewSectionRefs.current[workflow.id] = el;
+                    }}
+                    className="border-t border-white/5 bg-black/60 p-10 animate-in fade-in slide-in-from-top-4 duration-500"
+                  >
                     <div className="flex items-center justify-between mb-8 px-2">
                       <div className="flex items-center gap-6">
-                        <h5 className="text-white font-black uppercase tracking-[0.3em] text-[0.65rem] py-1 border-b-2 border-violet-600">Flow Structure</h5>
-                        <p className="text-gray-600 text-xs font-bold uppercase tracking-widest">Visual Preview</p>
+                        <button
+                          type="button"
+                          onClick={() => setPreviewMode(workflow.id, "structure")}
+                          className={`font-black uppercase tracking-[0.3em] text-[0.65rem] py-1 border-b-2 transition-colors ${getPreviewMode(workflow.id) === "structure" ? "text-white border-violet-600" : "text-gray-600 border-transparent hover:text-gray-400"}`}
+                        >
+                          Flow Structure
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPreviewMode(workflow.id, "visual")}
+                          className={`font-black uppercase tracking-[0.3em] text-[0.65rem] py-1 border-b-2 transition-colors ${getPreviewMode(workflow.id) === "visual" ? "text-white border-violet-600" : "text-gray-600 border-transparent hover:text-gray-400"}`}
+                        >
+                          Visual Preview
+                        </button>
                       </div>
                     </div>
 
-                    <div className="flex gap-6 overflow-x-auto pb-10 snap-x snap-mandatory no-scrollbar scroll-smooth">
-                      {workflow.nodes.map((node, i) => (
-                        <div key={node.id} className="flex-shrink-0 w-80 snap-center">
-                          <div className="bg-white/[0.02] border border-white/10 rounded-[2.5rem] p-6 hover:border-violet-500/40 transition-all duration-700 transform hover:-translate-y-2 group/node">
-                            <div className="flex items-center justify-between mb-6">
-                              <span className="text-[0.6rem] font-black text-gray-800 uppercase tracking-widest leading-none">{node.type === 'trigger' ? 'TRIGGER' : `NODE: ${(i).toString().padStart(2, '0')}`}</span>
-                              <div className="w-10 h-10 rounded-2xl bg-white/5 flex items-center justify-center group-hover/node:rotate-12 transition-transform">
-                                <MessageSquare className="w-5 h-5 text-violet-500/70" />
+                    {getPreviewMode(workflow.id) === "structure" ? (
+                      <div className="flex gap-6 overflow-x-auto pb-10 snap-x snap-mandatory no-scrollbar scroll-smooth">
+                        {workflow.nodes.map((node, i) => (
+                          <div key={node.id} className="flex-shrink-0 w-80 snap-center">
+                            <div className="bg-white/[0.02] border border-white/10 rounded-[2.5rem] p-6 hover:border-violet-500/40 transition-all duration-700 transform hover:-translate-y-2 group/node">
+                              <div className="flex items-center justify-between mb-6">
+                                <span className="text-[0.6rem] font-black text-gray-800 uppercase tracking-widest leading-none">{node.type === 'trigger' ? 'TRIGGER' : `NODE: ${(i).toString().padStart(2, '0')}`}</span>
+                                <div className="w-10 h-10 rounded-2xl bg-white/5 flex items-center justify-center group-hover/node:rotate-12 transition-transform">
+                                  <MessageSquare className="w-5 h-5 text-violet-500/70" />
+                                </div>
+                              </div>
+                              <h6 className="text-white font-black mb-3 truncate pr-4 text-base tracking-tight">{node.name}</h6>
+                              <p className="text-gray-500 text-xs line-clamp-3 mb-6 leading-relaxed font-medium">{node.message}</p>
+
+                              <div className="space-y-2">
+                                {workflow.edges.filter(e => e.source === node.id).map((edge) => {
+                                  const target = workflow.nodes.find(n => n.id === edge.target);
+                                  return (
+                                    <div key={edge.id} className="flex items-center justify-between px-4 py-2.5 bg-black/40 rounded-2xl border border-white/5 group/opt">
+                                      <span className="text-[0.65rem] font-bold text-gray-500 truncate group-hover/opt:text-white transition-colors">{target?.name || 'End'}</span>
+                                      <ArrowRight className="w-3.5 h-3.5 text-violet-600/30 group-hover/opt:text-violet-600 transition-colors" />
+                                    </div>
+                                  );
+                                })}
+                                {!workflow.edges.filter(e => e.source === node.id).length && <div className="text-center py-3 text-gray-800 text-[0.6rem] font-black uppercase tracking-[0.2em]">End of Flow</div>}
                               </div>
                             </div>
-                            <h6 className="text-white font-black mb-3 truncate pr-4 text-base tracking-tight">{node.name}</h6>
-                            <p className="text-gray-500 text-xs line-clamp-3 mb-6 leading-relaxed font-medium">{node.message}</p>
-
-                            <div className="space-y-2">
-                              {workflow.edges.filter(e => e.source === node.id).map((edge) => {
-                                const target = workflow.nodes.find(n => n.id === edge.target);
-                                return (
-                                  <div key={edge.id} className="flex items-center justify-between px-4 py-2.5 bg-black/40 rounded-2xl border border-white/5 group/opt">
-                                    <span className="text-[0.65rem] font-bold text-gray-500 truncate group-hover/opt:text-white transition-colors">{target?.name || 'End'}</span>
-                                    <ArrowRight className="w-3.5 h-3.5 text-violet-600/30 group-hover/opt:text-violet-600 transition-colors" />
-                                  </div>
-                                );
-                              })}
-                              {!workflow.edges.filter(e => e.source === node.id).length && <div className="text-center py-3 text-gray-800 text-[0.6rem] font-black uppercase tracking-[0.2em]">End of Flow</div>}
-                            </div>
                           </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="overflow-auto pb-10">
+                        <div className="relative min-w-[980px] h-[420px] rounded-[2rem] border border-white/10 bg-white/[0.02]">
+                          <svg className="absolute inset-0 w-full h-full pointer-events-none">
+                            {workflow.edges.map((edge) => {
+                              const sourceNode = workflow.nodes.find((n) => n.id === edge.source);
+                              const targetNode = workflow.nodes.find((n) => n.id === edge.target);
+                              if (!sourceNode || !targetNode) return null;
+
+                              const minX = Math.min(...workflow.nodes.map((n) => n.position?.x || 0));
+                              const maxX = Math.max(...workflow.nodes.map((n) => n.position?.x || 0));
+                              const minY = Math.min(...workflow.nodes.map((n) => n.position?.y || 0));
+                              const maxY = Math.max(...workflow.nodes.map((n) => n.position?.y || 0));
+                              const spanX = Math.max(maxX - minX, 1);
+                              const spanY = Math.max(maxY - minY, 1);
+
+                              const nodeWidth = 180;
+                              const nodeHeight = 86;
+                              const paddingX = 80;
+                              const paddingY = 60;
+                              const areaWidth = 980 - paddingX * 2 - nodeWidth;
+                              const areaHeight = 420 - paddingY * 2 - nodeHeight;
+
+                              const sourceX = paddingX + (((sourceNode.position?.x || 0) - minX) / spanX) * areaWidth + nodeWidth / 2;
+                              const sourceY = paddingY + (((sourceNode.position?.y || 0) - minY) / spanY) * areaHeight + nodeHeight;
+                              const targetX = paddingX + (((targetNode.position?.x || 0) - minX) / spanX) * areaWidth + nodeWidth / 2;
+                              const targetY = paddingY + (((targetNode.position?.y || 0) - minY) / spanY) * areaHeight;
+
+                              const controlY = sourceY + (targetY - sourceY) / 2;
+
+                              return (
+                                <path
+                                  key={edge.id}
+                                  d={`M ${sourceX} ${sourceY} C ${sourceX} ${controlY}, ${targetX} ${controlY}, ${targetX} ${targetY}`}
+                                  fill="none"
+                                  stroke="rgba(139, 92, 246, 0.55)"
+                                  strokeWidth="2"
+                                />
+                              );
+                            })}
+                          </svg>
+
+                          {workflow.nodes.map((node, index) => {
+                            const minX = Math.min(...workflow.nodes.map((n) => n.position?.x || 0));
+                            const maxX = Math.max(...workflow.nodes.map((n) => n.position?.x || 0));
+                            const minY = Math.min(...workflow.nodes.map((n) => n.position?.y || 0));
+                            const maxY = Math.max(...workflow.nodes.map((n) => n.position?.y || 0));
+                            const spanX = Math.max(maxX - minX, 1);
+                            const spanY = Math.max(maxY - minY, 1);
+
+                            const nodeWidth = 180;
+                            const nodeHeight = 86;
+                            const paddingX = 80;
+                            const paddingY = 60;
+                            const areaWidth = 980 - paddingX * 2 - nodeWidth;
+                            const areaHeight = 420 - paddingY * 2 - nodeHeight;
+
+                            const left = paddingX + (((node.position?.x || 0) - minX) / spanX) * areaWidth;
+                            const top = paddingY + (((node.position?.y || 0) - minY) / spanY) * areaHeight;
+
+                            return (
+                              <div
+                                key={node.id}
+                                className="absolute w-[180px] h-[86px] rounded-2xl border border-white/10 bg-black/40 p-3"
+                                style={{ left, top }}
+                              >
+                                <div className="flex items-center justify-between mb-2">
+                                  <span className="text-[0.52rem] font-black text-gray-700 uppercase tracking-widest">
+                                    {node.type === 'trigger' ? 'Trigger' : `Node ${index + 1}`}
+                                  </span>
+                                  <span className="w-2 h-2 rounded-full bg-violet-500/70" />
+                                </div>
+                                <p className="text-white text-xs font-bold truncate">{node.name}</p>
+                                <p className="text-gray-500 text-[0.62rem] mt-1 truncate">{node.message || 'No message'}</p>
+                              </div>
+                            );
+                          })}
                         </div>
-                      ))}
-                    </div>
+                      </div>
+                    )}
 
                     <div className="flex gap-4 p-8 items-center bg-[#0d0d12] rounded-3xl mt-4">
                       <div className="flex items-center gap-4 flex-1">
@@ -424,6 +552,14 @@ export function WorkflowInterface() {
                           className="flex items-center gap-3 px-8 py-4 bg-violet-600 hover:bg-violet-500 text-white rounded-3xl transition-all font-black text-xs uppercase tracking-widest shadow-xl shadow-violet-600/20"
                         >
                           <Edit2 className="w-4 h-4" /> Open Editor
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/app/workflows/${workflow.id}?panel=simulate`)}
+                          className="flex items-center gap-3 px-8 py-4 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/30 text-indigo-300 rounded-3xl transition-all font-black text-xs uppercase tracking-widest"
+                        >
+                          <Play className="w-4 h-4" /> Simulate
                         </button>
 
                         <button
