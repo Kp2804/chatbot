@@ -2,6 +2,13 @@
 -- Purpose: allow embedded widget to display FAQ chips and workflow trigger buttons
 -- while keeping all write/config actions restricted to chatbot owners.
 
+-- Chatbots: allow read access so chatbot name can be displayed in embedded widget
+DROP POLICY IF EXISTS "Public can read chatbots for embed" ON chatbots;
+CREATE POLICY "Public can read chatbots for embed"
+ON chatbots
+FOR SELECT
+USING (true);
+
 -- FAQs: allow read access for published entries only
 DROP POLICY IF EXISTS "Public can read published faqs for embed" ON faqs;
 CREATE POLICY "Public can read published faqs for embed"

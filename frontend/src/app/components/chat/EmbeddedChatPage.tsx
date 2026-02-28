@@ -1,14 +1,24 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router";
+import { useNavigate, useParams, useSearchParams } from "react-router";
 import { RefreshCw } from "lucide-react";
 import { supabase } from "../../../lib/supabase";
 import { ChatInterface } from "./ChatInterface";
 
 export function EmbeddedChatPage() {
   const { chatbotId } = useParams();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [ready, setReady] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+
+  // Get user name from URL parameter
+  const userName = searchParams.get('userName') || '';
+  
+  // Log for debugging
+  useEffect(() => {
+    console.log('EmbeddedChatPage URL params:', Object.fromEntries(searchParams.entries()));
+    console.log('EmbeddedChatPage userName:', userName);
+  }, [searchParams, userName]);
 
   useEffect(() => {
     const initialize = async () => {
@@ -63,7 +73,7 @@ export function EmbeddedChatPage() {
 
   return (
     <div className="h-screen w-full bg-[#08080c]">
-      <ChatInterface embedded />
+      <ChatInterface embedded userName={userName} />
     </div>
   );
 }

@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Test Chatbot with User Name</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      margin: 0;
+    }
+    
+    .container {
+      background: white;
+      border-radius: 20px;
+      padding: 40px;
+      max-width: 600px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    }
+    
+    h1 {
+      color: #333;
+      margin-bottom: 10px;
+    }
+    
+    .info {
+      background: #f0f4ff;
+      padding: 20px;
+      border-radius: 12px;
+      margin: 20px 0;
+      border-left: 4px solid #667eea;
+    }
+    
+    .user-name {
+      font-size: 1.5em;
+      color: #667eea;
+      font-weight: bold;
+      margin-bottom: 10px;
+    }
+    
+    .instruction {
+      background: #667eea;
+      color: white;
+      padding: 20px;
+      border-radius: 12px;
+      margin-top: 20px;
+    }
+    
+    .instruction h2 {
+      margin-top: 0;
+      margin-bottom: 10px;
+      font-size: 1.2em;
+    }
+    
+    code {
+      background: rgba(255,255,255,0.2);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: monospace;
+    }
+  </style>
+</head>
+<body>
+  <!-- This element will be auto-detected by the chatbot widget -->
+  <div class="container">
+    <h1>👋 Test Personalized Chatbot</h1>
+    
+    <div class="info">
+      <p><strong>Logged in as:</strong></p>
+      <div class="user-name">John Smith</div>
+      <p style="color: #666; font-size: 0.9em;">This is auto-detected by the chatbot widget</p>
+    </div>
+    
+    <div class="instruction">
+      <h2>💬 Test Instructions:</h2>
+      <ol style="line-height: 1.8; margin: 10px 0;">
+        <li>Click the purple chatbot button (bottom-right)</li>
+        <li>The greeting should say: <code>"Hello John, what can I do for you?"</code></li>
+        <li>When you ask questions, the AI will use "John" in responses</li>
+        <li>Try asking: "What are your services?" or "Can you help me?"</li>
+      </ol>
+    </div>
+    
+    <div class="info" style="margin-top: 20px; background: #fff9e6; border-left-color: #ffc107;">
+      <p style="margin: 0;"><strong>💡 Tip:</strong> Change the name in the HTML to test different names!</p>
+    </div>
+  </div>
+  
+  <!-- Chatbot Widget - Will auto-detect the .user-name element above -->
+  <script
+    src="http://localhost:3000/chatbot-widget.js"
+    data-app-url="http://localhost:3000"
+    data-chatbot-id="YOUR_CHATBOT_ID"
+    data-width="400px"
+    data-height="600px"
+  ></script>
+</body>
+</html>

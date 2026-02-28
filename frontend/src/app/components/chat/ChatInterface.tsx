@@ -158,7 +158,7 @@ function deriveConversationTitle(content: string) {
   return toTitleCase(short);
 }
 
-export function ChatInterface({ embedded = false }: { embedded?: boolean }) {
+export function ChatInterface({ embedded = false, userName = '' }: { embedded?: boolean; userName?: string }) {
   const navigate = useNavigate();
   const { chatbotId } = useParams();
   const activeChatbotId = chatbotId || null;
@@ -176,6 +176,16 @@ export function ChatInterface({ embedded = false }: { embedded?: boolean }) {
   const [currentStepId, setCurrentStepId] = useState<string | null>(null);
   const [totalChatsAllTime, setTotalChatsAllTime] = useState(0);
   const [resolvedRate, setResolvedRate] = useState(0);
+  const [chatbot, setChatbot] = useState<any>(null);
+
+  // Get display name for addressing the user
+  const displayUserName = userName || user?.user_metadata?.full_name || '';
+  
+  // Log for debugging
+  useEffect(() => {
+    console.log('ChatInterface userName prop:', userName);
+    console.log('ChatInterface displayUserName:', displayUserName);
+  }, [userName, displayUserName]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -189,6 +199,7 @@ export function ChatInterface({ embedded = false }: { embedded?: boolean }) {
           navigate('/app');
           return;
         }
+        fetchChatbot();
         fetchConversations();
         fetchFAQs();
         fetchWorkflows();
@@ -204,6 +215,7 @@ export function ChatInterface({ embedded = false }: { embedded?: boolean }) {
 
   useEffect(() => {
     if (activeChatbotId) {
+      fetchChatbot();
       fetchConversations();
       fetchFAQs();
       fetchWorkflows();
@@ -343,6 +355,16 @@ export function ChatInterface({ embedded = false }: { embedded?: boolean }) {
     }
   };
 
+  const fetchChatbot = async () => {
+    if (!activeChatbotId) return;
+    const { data, error } = await supabase
+      .from('chatbots')
+      .select('id, name, description')
+      .eq('id', activeChatbotId)
+      .single();
+    if (!error && data) setChatbot(data);
+  };
+
   const fetchMessages = async (convId: string) => {
     const { data, error } = await supabase
       .from('messages')
@@ -411,17 +433,20 @@ export function ChatInterface({ embedded = false }: { embedded?: boolean }) {
       setActiveConvId(data.id);
 
       // Add default greeting message
-      const userName = user?.user_metadata?.full_name?.split(' ')[0] || "there";
+      // Use displayUserName which includes URL parameter or user metadata
+      const greetingName = (displayUserName && displayUserName.trim()) 
+        ? displayUserName.trim().split(' ')[0] 
+        : "there";
 
       // Look for a 'Welcome' workflow (case insensitive)
       const welcomeWf = workflows.find(w => w.name.toLowerCase() === 'welcome');
 
-      let initialContent = `Hello ${userName}, what can I do for you?`;
+      let initialContent = `Hello ${greetingName}, what can I do for you?`;
 
       if (welcomeWf && welcomeWf.nodes.length > 0) {
         const triggerNode = welcomeWf.nodes.find(n => n.type === 'trigger') || welcomeWf.nodes[0];
         // Use the first step's message but prepend the personalized greeting
-        initialContent = `**Hello ${userName}!**\n${triggerNode.message}`;
+        initialContent = `**Hello ${greetingName}!**\n${triggerNode.message}`;
         setActiveWorkflow(welcomeWf);
         setCurrentStepId(triggerNode.id);
       }
@@ -485,10 +510,17 @@ export function ChatInterface({ embedded = false }: { embedded?: boolean }) {
 
   const handleSend = async () => {
     const content = inputValue.trim();
-    if (!content || !activeConvId || !user) return;
+    if (!content || !user) return;
+
+    // Auto-create conversation if needed (for embedded mode)
+    let currentConvId = activeConvId;
+    if (!currentConvId) {
+      currentConvId = await handleCreateChat();
+      if (!currentConvId) return;
+    }
 
     const userMsg: any = {
-      conversation_id: activeConvId,
+      conversation_id: currentConvId,
       role: "user",
       content,
     };
@@ -503,7 +535,7 @@ export function ChatInterface({ embedded = false }: { embedded?: boolean }) {
     setMessages(prev => [...prev, savedUserMsg]);
     setIsTyping(true);
 
-    await updateConversationMetadata(activeConvId, content);
+    await updateConversationMetadata(currentConvId, content);
 
     // Check for workflow triggers
     const triggerWords = ["hi", "hello", "hey", "start", "welcome"];
@@ -519,14 +551,56 @@ export function ChatInterface({ embedded = false }: { embedded?: boolean }) {
       if (triggerWf && triggerWf.nodes.length > 0) {
         startWorkflow(triggerWf);
       } else {
-        const botMsg: any = {
-          conversation_id: activeConvId,
-          role: "assistant",
-          content: "I'm your AI assistant. How can I help you today?",
-        };
-        const { data: savedBotMsg, error: botError } = await supabase.from('messages').insert([botMsg]).select().single();
-        if (savedBotMsg) setMessages(prev => [...prev, savedBotMsg]);
-        if (botError) console.error("Error sending bot response:", botError.message);
+        // Use AI to generate response
+        try {
+          const response = await fetch('http://localhost:3001/api/chat', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              message: content,
+              chatbotContext: {
+                name: chatbot?.name || 'AI Assistant',
+                description: chatbot?.description || 'A helpful chatbot'
+              },
+              userName: displayUserName, // Pass user name for personalization
+              conversationHistory: messages.slice(-5) // Last 5 messages for context
+            })
+          });
+
+          let aiResponse: string;
+
+          if (response.status === 429) {
+            // Rate limit exceeded
+            const errorData = await response.json();
+            aiResponse = `⚠️ **Daily Message Limit Reached**\n\n${errorData.message || 'You have reached your daily message limit. Please try again tomorrow.'}\n\nLimit: ${errorData.limit || 50} messages per day`;
+          } else if (!response.ok) {
+            throw new Error('Failed to get AI response');
+          } else {
+            const data = await response.json();
+            aiResponse = data.response;
+          }
+
+          const botMsg: any = {
+            conversation_id: currentConvId,
+            role: "assistant",
+            content: aiResponse,
+          };
+          const { data: savedBotMsg, error: botError } = await supabase.from('messages').insert([botMsg]).select().single();
+          if (savedBotMsg) setMessages(prev => [...prev, savedBotMsg]);
+          if (botError) console.error("Error sending bot response:", botError.message);
+        } catch (error) {
+          console.error('Error calling AI backend:', error);
+          // Fallback response if AI fails
+          const botMsg: any = {
+            conversation_id: currentConvId,
+            role: "assistant",
+            content: "I'm experiencing technical difficulties. Please try again or check if the backend server is running.",
+          };
+          const { data: savedBotMsg } = await supabase.from('messages').insert([botMsg]).select().single();
+          if (savedBotMsg) setMessages(prev => [...prev, savedBotMsg]);
+        }
         setIsTyping(false);
         fetchConversations();
       }
@@ -705,7 +779,7 @@ export function ChatInterface({ embedded = false }: { embedded?: boolean }) {
               <Bot className="w-4 h-4 text-white" />
             </div>
             <div>
-              <div className="text-black dark:text-white" style={{ fontSize: "0.875rem", fontWeight: 600 }}>{activeConv?.title || "Select a chat"}</div>
+              <div className="text-black dark:text-white" style={{ fontSize: "0.875rem", fontWeight: 600 }}>{chatbot?.name || "Loading..."}</div>
               <div className="flex items-center gap-1.5 text-emerald-500 dark:text-emerald-400" style={{ fontSize: "0.7rem" }}>
                 <span className="w-1.5 h-1.5 bg-emerald-500 dark:bg-emerald-400 rounded-full inline-block" />
                 Active
@@ -725,23 +799,27 @@ export function ChatInterface({ embedded = false }: { embedded?: boolean }) {
             )}
             <button
               type="button"
-              onClick={() => fetchMessages(activeConvId!)}
+              onClick={handleCreateChat}
               className="px-3 py-1.5 bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 border border-gray-300 dark:border-white/8 rounded-lg text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white flex items-center gap-1.5 transition-all"
               style={{ fontSize: "0.75rem" }}
             >
               <RefreshCw className="w-3 h-3" /> Refresh
             </button>
-            <button
-              type="button"
-              onClick={() => activeConvId && handleDeleteChat(activeConvId)}
-              className="w-8 h-8 flex items-center justify-center text-gray-600 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-100 dark:hover:bg-red-400/10 rounded-lg transition-all"
-              title="Delete Chat"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
-            <button type="button" className="w-8 h-8 flex items-center justify-center text-gray-600 dark:text-gray-500 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg transition-all">
-              <MoreVertical className="w-4 h-4" />
-            </button>
+            {!embedded && (
+              <button
+                type="button"
+                onClick={() => activeConvId && handleDeleteChat(activeConvId)}
+                className="w-8 h-8 flex items-center justify-center text-gray-600 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-100 dark:hover:bg-red-400/10 rounded-lg transition-all"
+                title="Delete Chat"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            )}
+            {!embedded && (
+              <button type="button" className="w-8 h-8 flex items-center justify-center text-gray-600 dark:text-gray-500 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg transition-all">
+                <MoreVertical className="w-4 h-4" />
+              </button>
+            )}
           </div>
         </div>
 

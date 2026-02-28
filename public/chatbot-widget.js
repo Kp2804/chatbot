@@ -8,10 +8,46 @@
   const iconUrl = script?.getAttribute("data-icon-url") || "";
   const panelWidth = script?.getAttribute("data-width") || "360px";
   const panelHeight = script?.getAttribute("data-height") || "560px";
+  const userName = script?.getAttribute("data-user-name") || "";
 
   if (!chatbotId) {
     console.error("[Chatbot Widget] Missing data-chatbot-id attribute");
     return;
+  }
+
+  // Auto-detect user name from common page elements if not provided
+  function detectUserName() {
+    if (userName) {
+      console.log('[Chatbot Widget] Using provided userName:', userName);
+      return userName;
+    }
+    
+    console.log('[Chatbot Widget] Attempting to auto-detect user name...');
+    
+    // Try common selectors for user name
+    const selectors = [
+      '.user-name',
+      '.username', 
+      '[data-user-name]',
+      '#user-name',
+      '.profile-name',
+      '.account-name',
+      '[data-username]'
+    ];
+    
+    for (const selector of selectors) {
+      const element = document.querySelector(selector);
+      if (element) {
+        const name = element.textContent?.trim() || element.getAttribute('data-user-name') || element.getAttribute('data-username');
+        if (name && name.length > 0 && name.length < 50) {
+          console.log('[Chatbot Widget] Auto-detected userName from', selector + ':', name);
+          return name;
+        }
+      }
+    }
+    
+    console.log('[Chatbot Widget] No user name found');
+    return '';
   }
 
   const container = document.createElement("div");
@@ -40,7 +76,18 @@
 
   const iframe = document.createElement("iframe");
   iframe.title = "Nexus Chatbot";
-  iframe.src = `${appUrl}/embed/${encodeURIComponent(chatbotId)}`;
+  
+  // Build URL with user name parameter
+  const detectedUserName = detectUserName();
+  let iframeUrl = `${appUrl}/embed/${encodeURIComponent(chatbotId)}`;
+  if (detectedUserName) {
+    iframeUrl += `?userName=${encodeURIComponent(detectedUserName)}`;
+    console.log('[Chatbot Widget] Final iframe URL:', iframeUrl);
+  } else {
+    console.log('[Chatbot Widget] No userName - iframe URL:', iframeUrl);
+  }
+  
+  iframe.src = iframeUrl;
   iframe.style.width = "100%";
   iframe.style.height = "100%";
   iframe.style.border = "0";
@@ -76,9 +123,23 @@
   }
 
   let open = false;
-  launcher.addEventListener("click", function () {
+  launcher.addEventListener("click", function (event) {
+    event.stopPropagation();
     open = !open;
     panel.style.display = open ? "block" : "none";
+  });
+
+  // Close on click outside
+  document.addEventListener("click", function (event) {
+    if (open && !container.contains(event.target)) {
+      open = false;
+      panel.style.display = "none";
+    }
+  });
+
+  // Prevent clicks inside panel from closing it
+  panel.addEventListener("click", function (event) {
+    event.stopPropagation();
   });
 
   document.addEventListener("keydown", function (event) {

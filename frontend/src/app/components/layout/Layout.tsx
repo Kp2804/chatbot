@@ -151,7 +151,9 @@ export function Layout() {
         </button>
 
         {/* Logo */}
-        <div className={`flex items-center gap-3 px-4 py-5 border-b border-gray-300 dark:border-white/8 ${collapsed ? "justify-center" : ""}`}>
+        <div 
+          onClick={() => navigate('/app')}
+          className={`flex items-center gap-3 px-4 py-5 border-b border-gray-300 dark:border-white/8 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-900/30 transition-colors ${collapsed ? "justify-center" : ""}`}>
           <div className="w-9 h-9 bg-gradient-to-br from-violet-500 to-indigo-600 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg shadow-violet-500/25">
             <Bot className="w-5 h-5 text-white" />
           </div>

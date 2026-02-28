@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chatbot Widget Demo - Personalized User Experience</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    
+    .container {
+      max-width: 800px;
+      background: white;
+      border-radius: 20px;
+      padding: 40px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    }
+    
+    h1 {
+      color: #333;
+      margin-bottom: 10px;
+      font-size: 2.5em;
+    }
+    
+    .welcome {
+      color: #667eea;
+      font-size: 1.2em;
+      margin-bottom: 30px;
+    }
+    
+    .user-info {
+      background: #f7f7f7;
+      padding: 20px;
+      border-radius: 12px;
+      margin-bottom: 30px;
+    }
+    
+    .user-info h2 {
+      color: #555;
+      font-size: 1.1em;
+      margin-bottom: 15px;
+    }
+    
+    .user-profile {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+    }
+    
+    .avatar {
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 24px;
+      font-weight: bold;
+    }
+    
+    .user-name {
+      font-size: 1.3em;
+      font-weight: 600;
+      color: #333;
+    }
+    
+    .user-email {
+      color: #888;
+      font-size: 0.9em;
+    }
+    
+    .features {
+      margin-top: 30px;
+    }
+    
+    .feature {
+      padding: 15px;
+      margin-bottom: 15px;
+      background: #f0f4ff;
+      border-radius: 10px;
+      border-left: 4px solid #667eea;
+    }
+    
+    .feature h3 {
+      color: #667eea;
+      margin-bottom: 5px;
+      font-size: 1em;
+    }
+    
+    .feature p {
+      color: #666;
+      font-size: 0.9em;
+      line-height: 1.5;
+    }
+    
+    .chat-hint {
+      text-align: center;
+      padding: 20px;
+      background: #667eea;
+      color: white;
+      border-radius: 12px;
+      margin-top: 30px;
+      animation: pulse 2s infinite;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.02); }
+    }
+    
+    .chat-hint p {
+      margin-bottom: 10px;
+      font-size: 1.1em;
+    }
+    
+    .chat-hint small {
+      opacity: 0.9;
+      font-size: 0.9em;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>👋 Welcome to Our Platform</h1>
+    <p class="welcome">Experience personalized AI-powered support</p>
+    
+    <div class="user-info">
+      <h2>Your Profile</h2>
+      <div class="user-profile">
+        <div class="avatar">JS</div>
+        <div>
+          <div class="user-name">John Smith</div>
+          <div class="user-email">john.smith@example.com</div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="features">
+      <div class="feature">
+        <h3>✨ Personalized Experience</h3>
+        <p>Our chatbot knows your name and addresses you personally throughout the conversation.</p>
+      </div>
+      
+      <div class="feature">
+        <h3>🤖 AI-Powered Support</h3>
+        <p>Get instant answers powered by advanced AI technology with contextual understanding.</p>
+      </div>
+      
+      <div class="feature">
+        <h3>🎯 Smart Rate Limiting</h3>
+        <p>Protected conversations with 50 messages per day limit to ensure quality service.</p>
+      </div>
+      
+      <div class="feature">
+        <h3>💬 Natural Conversations</h3>
+        <p>Chat naturally like you would with a human - the AI understands context and remembers your conversation.</p>
+      </div>
+    </div>
+    
+    <div class="chat-hint">
+      <p>💬 Try our chatbot!</p>
+      <small>Click the purple button in the bottom-right corner and ask anything. <br>Notice how the bot addresses you by name! 🎉</small>
+    </div>
+  </div>
+  
+  <!-- Chatbot Widget with User Name -->
+  <script
+    src="http://localhost:3000/chatbot-widget.js"
+    data-app-url="http://localhost:3000"
+    data-chatbot-id="YOUR_CHATBOT_ID"
+    data-user-name="John Smith"
+    data-width="380px"
+    data-height="600px"
+  ></script>
+</body>
+</html>
