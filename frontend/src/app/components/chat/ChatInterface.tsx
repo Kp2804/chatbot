@@ -1,11 +1,12 @@
 import { useState, useRef, useEffect } from "react";
 import * as Icons from "lucide-react";
 import {
-  Send, Bot, Plus, Search, MoreVertical, Paperclip,
-  Smile, Mic, ThumbsUp, ThumbsDown, Copy, RefreshCw,
+  Send, Bot, Plus, Search, MoreVertical,
+  Smile, ThumbsUp, ThumbsDown, Copy, RefreshCw,
   Sparkles, Clock, Check, Star, Trash2, HelpCircle,
   ArrowRight, Layout
 } from "lucide-react";
+import EmojiPicker, { EmojiClickData } from "emoji-picker-react";
 import { supabase } from "../../../lib/supabase";
 import { useNavigate, useParams } from "react-router";
 
@@ -177,6 +178,7 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
   const [totalChatsAllTime, setTotalChatsAllTime] = useState(0);
   const [resolvedRate, setResolvedRate] = useState(0);
   const [chatbot, setChatbot] = useState<any>(null);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 
   // Get display name for addressing the user
   const displayUserName = userName || user?.user_metadata?.full_name || '';
@@ -184,6 +186,19 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const embeddedChatInitializedRef = useRef(false);
+  const emojiPickerRef = useRef<HTMLDivElement>(null);
+
+  // Close emoji picker when clicking outside
+  useEffect(() => {
+    if (!showEmojiPicker) return;
+    const handler = (e: MouseEvent) => {
+      if (emojiPickerRef.current && !emojiPickerRef.current.contains(e.target as Node)) {
+        setShowEmojiPicker(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showEmojiPicker]);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -873,7 +888,6 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
                       : "bg-gray-100 dark:bg-white/8 border border-gray-300 dark:border-white/10 text-gray-800 dark:text-gray-200 rounded-tl-sm"
                       }`} style={{ fontSize: "0.875rem", lineHeight: 1.65 }}>
                       {renderContent(msg.content)}
-
                     </div>
 
                     {/* Workflow Triggers - Shown only in the first assistant message */}
@@ -981,36 +995,55 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
 
         {/* Input */}
         <div className="px-6 pb-6 flex-shrink-0">
-          <div className="flex items-end gap-3 bg-gray-100 dark:bg-white/5 border border-gray-300 dark:border-white/10 rounded-2xl px-4 py-3 focus-within:border-violet-500/40 transition-colors">
-            <button type="button" className="text-gray-600 dark:text-gray-600 hover:text-gray-700 dark:hover:text-gray-400 transition-colors mb-0.5">
-              <Paperclip className="w-4 h-4" />
-            </button>
-            <textarea
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              ref={textareaRef}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSend();
-                }
-              }}
-              placeholder="Type a message... (Enter to send)"
-              rows={1}
-              className="flex-1 bg-transparent text-gray-800 dark:text-gray-200 placeholder-gray-700 dark:placeholder-gray-600 focus:outline-none resize-none"
-              style={{ fontSize: "0.875rem", lineHeight: 1.5, minHeight: "24px", maxHeight: "120px" }}
-            />
-            <div className="flex items-center gap-2 mb-0.5">
-              <button type="button" className="text-gray-600 dark:text-gray-600 hover:text-gray-700 dark:hover:text-gray-400 transition-colors"><Smile className="w-4 h-4" /></button>
-              <button type="button" className="text-gray-600 dark:text-gray-600 hover:text-gray-700 dark:hover:text-gray-400 transition-colors"><Mic className="w-4 h-4" /></button>
-              <button
-                type="button"
-                onClick={handleSend}
-                disabled={!inputValue.trim()}
-                className="w-8 h-8 bg-gradient-to-br from-violet-500 to-indigo-600 hover:from-violet-600 hover:to-indigo-700 disabled:opacity-40 text-white rounded-xl flex items-center justify-center transition-all shadow-lg shadow-violet-500/25"
-              >
-                <Send className="w-3.5 h-3.5" />
-              </button>
+          <div className="relative">
+            {/* Emoji Picker */}
+            {showEmojiPicker && (
+              <div ref={emojiPickerRef} className="absolute bottom-full mb-2 right-0 z-50">
+                <EmojiPicker
+                  onEmojiClick={(data: EmojiClickData) => {
+                    setInputValue(prev => prev + data.emoji);
+                    setShowEmojiPicker(false);
+                    textareaRef.current?.focus();
+                  }}
+                  theme={"dark" as any}
+                  width={320}
+                  height={380}
+                />
+              </div>
+            )}
+            <div className="flex items-end gap-3 bg-gray-100 dark:bg-white/5 border border-gray-300 dark:border-white/10 rounded-2xl px-4 py-3 focus-within:border-violet-500/40 transition-colors">
+              <textarea
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                ref={textareaRef}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSend();
+                  }
+                }}
+                placeholder="Type a message... (Enter to send)"
+                rows={1}
+                className="flex-1 bg-transparent text-gray-800 dark:text-gray-200 placeholder-gray-700 dark:placeholder-gray-600 focus:outline-none resize-none"
+                style={{ fontSize: "0.875rem", lineHeight: 1.5, minHeight: "24px", maxHeight: "120px" }}
+              />
+              <div className="flex items-center gap-2 mb-0.5">
+                <button
+                  type="button"
+                  onClick={() => setShowEmojiPicker(prev => !prev)}
+                  className={`transition-colors ${showEmojiPicker ? 'text-violet-400' : 'text-gray-600 dark:text-gray-600 hover:text-violet-400 dark:hover:text-violet-400'}`}
+                >
+                  <Smile className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSend}
+                  disabled={!inputValue.trim()}
+                  className="w-8 h-8 bg-gradient-to-br from-violet-500 to-indigo-600 hover:from-violet-600 hover:to-indigo-700 disabled:opacity-40 text-white rounded-xl flex items-center justify-center transition-all shadow-lg shadow-violet-500/25"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
           </div>
         </div>
