@@ -13,12 +13,6 @@ export function EmbeddedChatPage() {
 
   // Get user name from URL parameter
   const userName = searchParams.get('userName') || '';
-  
-  // Log for debugging
-  useEffect(() => {
-    console.log('EmbeddedChatPage URL params:', Object.fromEntries(searchParams.entries()));
-    console.log('EmbeddedChatPage userName:', userName);
-  }, [searchParams, userName]);
 
   useEffect(() => {
     const initialize = async () => {
@@ -29,24 +23,30 @@ export function EmbeddedChatPage() {
 
       localStorage.setItem("activeChatbotId", chatbotId);
 
-      const { data } = await supabase.auth.getSession();
-      if (!data.session) {
-        try {
+      // Timeout: if auth takes more than 10s, show an error instead of spinner forever
+      const timeout = setTimeout(() => {
+        setAuthError("Chat took too long to load. Please refresh the page.");
+      }, 10000);
+
+      try {
+        const { data } = await supabase.auth.getSession();
+        if (!data.session) {
           await supabase.auth.signInAnonymously();
-        } catch (error) {
-          console.error("Anonymous sign-in failed:", error);
-          setAuthError("Embedded chat auth failed. Enable Anonymous sign-ins in Supabase Auth > Providers and try again.");
+        }
+
+        const { data: userData } = await supabase.auth.getUser();
+        if (!userData.user) {
+          setAuthError("No user session available. Please refresh the page.");
           return;
         }
-      }
 
-      const { data: userData } = await supabase.auth.getUser();
-      if (!userData.user) {
-        setAuthError("No user session available for embedded chat. Please check Supabase auth settings.");
-        return;
+        clearTimeout(timeout);
+        setReady(true);
+      } catch (error) {
+        clearTimeout(timeout);
+        console.error("Embedded chat init failed:", error);
+        setAuthError("Failed to connect. Please refresh the page.");
       }
-
-      setReady(true);
     };
 
     initialize();
@@ -55,24 +55,25 @@ export function EmbeddedChatPage() {
   if (!ready) {
     if (authError) {
       return (
-        <div className="h-screen flex items-center justify-center bg-[#08080c] text-gray-300 p-6 text-center">
-          <div className="max-w-md">
-            <h2 className="text-white text-lg font-semibold mb-2">Chatbot is loaded but not authorized</h2>
-            <p className="text-sm text-gray-400">{authError}</p>
+        <div className="dark" style={{ height: '100vh', background: '#0f0f13', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px', textAlign: 'center' }}>
+          <div>
+            <h2 style={{ color: '#ffffff', fontSize: '1rem', fontWeight: 600, marginBottom: '8px' }}>Authorization Error</h2>
+            <p style={{ color: '#9ca3af', fontSize: '0.85rem' }}>{authError}</p>
           </div>
         </div>
       );
     }
 
     return (
-      <div className="h-screen flex items-center justify-center bg-[#08080c] text-gray-500">
-        <RefreshCw className="w-6 h-6 animate-spin" />
+      <div style={{ height: '100vh', background: '#0f0f13', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
+        <RefreshCw className="w-6 h-6 animate-spin" style={{ color: '#a78bfa' }} />
+        <span style={{ color: '#9ca3af', fontSize: '0.85rem' }}>Loading chat...</span>
       </div>
     );
   }
 
   return (
-    <div className="h-screen w-full bg-[#08080c]">
+    <div className="dark" style={{ height: '100vh', width: '100%', background: '#0f0f13' }}>
       <ChatInterface embedded userName={userName} />
     </div>
   );

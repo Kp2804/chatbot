@@ -180,12 +180,6 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
 
   // Get display name for addressing the user
   const displayUserName = userName || user?.user_metadata?.full_name || '';
-  
-  // Log for debugging
-  useEffect(() => {
-    console.log('ChatInterface userName prop:', userName);
-    console.log('ChatInterface displayUserName:', displayUserName);
-  }, [userName, displayUserName]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -196,7 +190,8 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
       setUser(user);
       if (user) {
         if (!activeChatbotId) {
-          navigate('/app');
+          // Don't redirect if in embedded mode — chatbotId comes from the URL param
+          if (!embedded) navigate('/app');
           return;
         }
         fetchChatbot();
@@ -205,7 +200,7 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
         fetchWorkflows();
       }
     });
-  }, [activeChatbotId, navigate]);
+  }, [activeChatbotId, navigate, embedded]);
 
   useEffect(() => {
     if (activeChatbotId) {
@@ -237,13 +232,16 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
 
     const initializeEmbeddedConversation = async () => {
       const newConversationId = await handleCreateChat();
-      if (!newConversationId && conversations.length > 0) {
-        setActiveConvId(conversations[0].id);
+      if (!newConversationId) {
+        // handleCreateChat failed — reset so user can retry by refreshing
+        embeddedChatInitializedRef.current = false;
+        console.error('Embedded chat: failed to create conversation');
       }
     };
 
     initializeEmbeddedConversation();
-  }, [embedded, user, activeChatbotId, conversations]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [embedded, user, activeChatbotId]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -396,7 +394,6 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
 
     if (!error) {
       const migrated = (data || []).map(migrateWorkflow);
-      console.log("Fetched and migrated workflows:", migrated);
       setWorkflows(migrated);
     }
   };
@@ -553,7 +550,8 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
       } else {
         // Use AI to generate response
         try {
-          const response = await fetch('http://localhost:3001/api/chat', {
+          const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+          const response = await fetch(`${backendUrl}/api/chat`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
