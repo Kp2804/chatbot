@@ -119,16 +119,16 @@ function ToastNotification({ message, type }: { message: string; type: "success"
 function ConfirmModal({ title, message, onConfirm, onCancel }: { title: string; message: string; onConfirm: () => void; onCancel: () => void }) {
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[110] p-4" onClick={(e) => { if (e.target === e.currentTarget) onCancel(); }}>
-      <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-[#1a1a24] border border-white/10 rounded-3xl w-full max-w-sm shadow-2xl p-6">
+      <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white dark:bg-[#1a1a24] border border-gray-200 dark:border-white/10 rounded-3xl w-full max-w-sm shadow-2xl p-6">
         <div className="flex items-center gap-4 mb-4">
           <div className="w-12 h-12 bg-red-500/10 rounded-2xl flex items-center justify-center">
             <AlertTriangle className="w-6 h-6 text-red-500" />
           </div>
-          <h3 className="text-white text-xl font-bold">{title}</h3>
+          <h3 className="text-gray-900 dark:text-white text-xl font-bold">{title}</h3>
         </div>
-        <p className="text-gray-400 mb-6 leading-relaxed" style={{ fontSize: "0.9rem" }}>{message}</p>
+        <p className="text-gray-500 dark:text-gray-400 mb-6 leading-relaxed" style={{ fontSize: "0.9rem" }}>{message}</p>
         <div className="flex items-center justify-end gap-3">
-          <button type="button" onClick={onCancel} className="px-5 py-2.5 bg-white/5 hover:bg-white/10 text-gray-400 rounded-xl transition-all font-bold text-sm">Dismiss</button>
+          <button type="button" onClick={onCancel} className="px-5 py-2.5 bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 text-gray-500 dark:text-gray-400 rounded-xl transition-all font-bold text-sm">Dismiss</button>
           <button type="button" onClick={onConfirm} className="px-5 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-xl transition-all font-bold text-sm shadow-lg shadow-red-500/20">Confirm Deletion</button>
         </div>
       </motion.div>
@@ -286,14 +286,14 @@ export function WorkflowInterface() {
   };
 
   return (
-    <div className="h-full overflow-y-auto bg-[#08080c]">
+    <div className="h-full overflow-y-auto bg-gray-50 dark:bg-[#08080c]">
       <div className="max-w-6xl mx-auto p-10">
         {toast && <ToastNotification message={toast.message} type={toast.type} />}
 
         <div className="flex items-end justify-between mb-12">
           <div>
-            <h1 className="text-white mb-2 leading-none" style={{ fontSize: "2.8rem", fontWeight: 900, letterSpacing: '-0.04em' }}>Logic Flows</h1>
-            <p className="text-gray-500 font-bold uppercase tracking-[0.2em]" style={{ fontSize: "0.7rem" }}>Visual Orchestration Engine</p>
+            <h1 className="text-gray-900 dark:text-white mb-2 leading-none" style={{ fontSize: "2.8rem", fontWeight: 900, letterSpacing: '-0.04em' }}>Logic Flows</h1>
+            <p className="text-gray-400 dark:text-gray-500 font-bold uppercase tracking-[0.2em]" style={{ fontSize: "0.7rem" }}>Visual Orchestration Engine</p>
           </div>
           <button
             type="button"
@@ -313,35 +313,35 @@ export function WorkflowInterface() {
             { label: "Aggregated Runs", value: totalRuns.toLocaleString(), desc: "Execution Metric", color: "from-blue-500/10" },
             { label: "Avg Precision", value: `${avgSuccess}%`, desc: "System Accuracy", color: "from-amber-500/10" },
           ].map((stat) => (
-            <div key={stat.label} className={`bg-white/[0.02] border border-white/5 rounded-[2rem] p-7 transition-all hover:bg-white/[0.04]`}>
-              <div className="text-white mb-1" style={{ fontSize: "2rem", fontWeight: 900, letterSpacing: '-0.02em' }}>{stat.value}</div>
-              <div className="text-gray-400 font-black uppercase tracking-widest mb-1" style={{ fontSize: "0.6rem" }}>{stat.label}</div>
-              <div className="text-gray-600 text-xs font-medium">{stat.desc}</div>
+            <div key={stat.label} className="bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/5 rounded-[2rem] p-7 transition-all hover:bg-gray-50 dark:hover:bg-white/[0.04]">
+              <div className="text-gray-900 dark:text-white mb-1" style={{ fontSize: "2rem", fontWeight: 900, letterSpacing: '-0.02em' }}>{stat.value}</div>
+              <div className="text-gray-400 dark:text-gray-400 font-black uppercase tracking-widest mb-1" style={{ fontSize: "0.6rem" }}>{stat.label}</div>
+              <div className="text-gray-500 dark:text-gray-600 text-xs font-medium">{stat.desc}</div>
             </div>
           ))}
         </div>
 
         <div className="flex items-center gap-5 mb-10">
-          <div className="flex items-center gap-3 bg-white/[0.02] border border-white/10 rounded-[1.5rem] px-5 py-4 flex-1 max-w-md focus-within:border-violet-600/50 transition-all">
-            <Search className="w-5 h-5 text-gray-700" />
+          <div className="flex items-center gap-3 bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/10 rounded-[1.5rem] px-5 py-4 flex-1 max-w-md focus-within:border-violet-600/50 transition-all">
+            <Search className="w-5 h-5 text-gray-400 dark:text-gray-700" />
             <input
               type="text"
               placeholder="Search automated infrastructures..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="bg-transparent text-gray-400 placeholder-gray-800 focus:outline-none w-full font-medium"
+              className="bg-transparent text-gray-700 dark:text-gray-400 placeholder-gray-400 dark:placeholder-gray-800 focus:outline-none w-full font-medium"
               style={{ fontSize: "0.95rem" }}
             />
           </div>
-          <div className="flex items-center gap-2 bg-black/40 rounded-[1.5rem] p-1.5 border border-white/5">
+          <div className="flex items-center gap-2 bg-gray-100 dark:bg-black/40 rounded-[1.5rem] p-1.5 border border-gray-200 dark:border-white/5">
             {(["all", "active", "paused", "draft"] as const).map((s) => (
               <button
                 key={s}
                 type="button"
                 onClick={() => setFilterStatus(s)}
                 className={`px-5 py-2.5 rounded-2xl capitalize transition-all font-black text-[0.65rem] tracking-widest ${filterStatus === s
-                  ? "bg-white/10 text-white shadow-xl shadow-white/5"
-                  : "text-gray-600 hover:text-gray-300"
+                  ? "bg-white dark:bg-white/10 text-gray-900 dark:text-white shadow-xl shadow-white/5"
+                  : "text-gray-400 dark:text-gray-600 hover:text-gray-700 dark:hover:text-gray-300"
                   }`}
               >
                 {s.toUpperCase()}
@@ -352,32 +352,32 @@ export function WorkflowInterface() {
 
         <div className="flex flex-col gap-5">
           {filtered.length === 0 ? (
-            <div className="text-center py-32 bg-white/[0.01] border-2 border-dashed border-white/5 rounded-[3rem]">
-              <GitBranch className="w-20 h-20 mx-auto mb-6 text-gray-900" />
-              <p className="text-gray-500 font-black uppercase tracking-[0.3em] text-[0.7rem] mb-2">Registry Void</p>
-              <p className="text-gray-700 font-bold" style={{ fontSize: "0.9rem" }}>No workflow entities detected matching current filters.</p>
+            <div className="text-center py-32 bg-white dark:bg-white/[0.01] border-2 border-dashed border-gray-200 dark:border-white/5 rounded-[3rem]">
+              <GitBranch className="w-20 h-20 mx-auto mb-6 text-gray-200 dark:text-gray-900" />
+              <p className="text-gray-400 dark:text-gray-500 font-black uppercase tracking-[0.3em] text-[0.7rem] mb-2">Registry Void</p>
+              <p className="text-gray-400 dark:text-gray-700 font-bold" style={{ fontSize: "0.9rem" }}>No workflow entities detected matching current filters.</p>
             </div>
           ) : (
             filtered.map((workflow) => (
-              <div key={workflow.id} className="group bg-[#0f0f15] hover:bg-[#12121c] border border-white/5 hover:border-violet-500/30 rounded-[2.5rem] overflow-hidden transition-all duration-500">
+              <div key={workflow.id} className="group bg-white dark:bg-[#0f0f15] hover:bg-gray-50 dark:hover:bg-[#12121c] border border-gray-200 dark:border-white/5 hover:border-violet-500/30 rounded-[2.5rem] overflow-hidden transition-all duration-500">
                 <div className="p-8">
                   <div className="flex items-center justify-between gap-8">
                     <div className="flex items-center gap-6 flex-1">
-                      <div className="w-16 h-16 bg-gradient-to-br from-violet-600/10 to-indigo-600/10 border border-white/5 rounded-[1.5rem] flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform duration-700">
+                      <div className="w-16 h-16 bg-gradient-to-br from-violet-600/10 to-indigo-600/10 border border-gray-200 dark:border-white/5 rounded-[1.5rem] flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform duration-700">
                         <GitBranch className="w-8 h-8 text-violet-500" />
                       </div>
                       <div className="flex-1">
                         <div className="flex items-center gap-4 mb-2">
-                          <h3 className="text-white text-xl font-black tracking-tight">{workflow.name}</h3>
+                          <h3 className="text-gray-900 dark:text-white text-xl font-black tracking-tight">{workflow.name}</h3>
                           <StatusBadge status={workflow.status} />
                         </div>
-                        <p className="text-gray-600 font-medium line-clamp-1 max-w-lg" style={{ fontSize: "0.9rem" }}>{workflow.description || "System overview unconfigured."}</p>
+                        <p className="text-gray-500 dark:text-gray-600 font-medium line-clamp-1 max-w-lg" style={{ fontSize: "0.9rem" }}>{workflow.description || "System overview unconfigured."}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-4">
                       <div className="flex -space-x-3 mr-4">
                         {(workflow.tags || []).slice(0, 3).map((tag) => (
-                          <div key={tag} className="px-3 py-1.5 bg-[#1a1a24] border border-white/10 rounded-xl text-[0.6rem] font-bold text-gray-500 uppercase tracking-widest shadow-2xl">
+                          <div key={tag} className="px-3 py-1.5 bg-gray-100 dark:bg-[#1a1a24] border border-gray-200 dark:border-white/10 rounded-xl text-[0.6rem] font-bold text-gray-500 uppercase tracking-widest shadow-2xl">
                             {tag}
                           </div>
                         ))}
@@ -385,7 +385,7 @@ export function WorkflowInterface() {
                       <button
                         type="button"
                         onClick={() => handleVisualPreview(workflow.id)}
-                        className="flex items-center gap-2.5 px-6 py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-[1.2rem] text-white transition-all font-black text-xs uppercase tracking-widest"
+                        className="flex items-center gap-2.5 px-6 py-3 bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 border border-gray-200 dark:border-white/10 rounded-[1.2rem] text-gray-700 dark:text-white transition-all font-black text-xs uppercase tracking-widest"
                       >
                         {expandedId === workflow.id ? "Hide Preview" : "Visual Preview"}
                         <ChevronRight className={`w-4 h-4 transition-transform duration-500 ${expandedId === workflow.id ? 'rotate-90' : ''}`} />
@@ -393,17 +393,9 @@ export function WorkflowInterface() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-4 gap-12 mt-8 pt-8 border-t border-white/5">
-                    {[
-                      { label: "Executions", value: (workflow.run_count || 0).toLocaleString() },
-                      { label: "Precision", value: `${workflow.success_rate || 0}%` },
-                      { label: "Nodes", value: (workflow.nodes || []).length.toString() },
-                    ].map((m) => (
-                      <div key={m.label}>
-                        <div className="text-gray-300 font-black text-lg mb-0.5">{m.value}</div>
-                        <div className="text-gray-700 font-black uppercase tracking-widest" style={{ fontSize: "0.55rem" }}>{m.label}</div>
-                      </div>
-                    ))}
+                  <div className="flex items-center gap-2 mt-8 pt-8 border-t border-gray-100 dark:border-white/5">
+                    <div className="text-gray-700 dark:text-gray-300 font-black text-lg">{(workflow.nodes || []).length}</div>
+                    <div className="text-gray-400 dark:text-gray-700 font-black uppercase tracking-widest" style={{ fontSize: "0.55rem" }}>Nodes</div>
                   </div>
                 </div>
 
@@ -412,21 +404,21 @@ export function WorkflowInterface() {
                     ref={(el) => {
                       previewSectionRefs.current[workflow.id] = el;
                     }}
-                    className="border-t border-white/5 bg-black/60 p-10 animate-in fade-in slide-in-from-top-4 duration-500"
+                    className="border-t border-gray-100 dark:border-white/5 bg-gray-50 dark:bg-black/60 p-10 animate-in fade-in slide-in-from-top-4 duration-500"
                   >
                     <div className="flex items-center justify-between mb-8 px-2">
                       <div className="flex items-center gap-6">
                         <button
                           type="button"
                           onClick={() => setPreviewMode(workflow.id, "structure")}
-                          className={`font-black uppercase tracking-[0.3em] text-[0.65rem] py-1 border-b-2 transition-colors ${getPreviewMode(workflow.id) === "structure" ? "text-white border-violet-600" : "text-gray-600 border-transparent hover:text-gray-400"}`}
+                          className={`font-black uppercase tracking-[0.3em] text-[0.65rem] py-1 border-b-2 transition-colors ${getPreviewMode(workflow.id) === "structure" ? "text-gray-900 dark:text-white border-violet-600" : "text-gray-400 dark:text-gray-600 border-transparent hover:text-gray-700 dark:hover:text-gray-400"}`}
                         >
                           Flow Structure
                         </button>
                         <button
                           type="button"
                           onClick={() => setPreviewMode(workflow.id, "visual")}
-                          className={`font-black uppercase tracking-[0.3em] text-[0.65rem] py-1 border-b-2 transition-colors ${getPreviewMode(workflow.id) === "visual" ? "text-white border-violet-600" : "text-gray-600 border-transparent hover:text-gray-400"}`}
+                          className={`font-black uppercase tracking-[0.3em] text-[0.65rem] py-1 border-b-2 transition-colors ${getPreviewMode(workflow.id) === "visual" ? "text-gray-900 dark:text-white border-violet-600" : "text-gray-400 dark:text-gray-600 border-transparent hover:text-gray-700 dark:hover:text-gray-400"}`}
                         >
                           Visual Preview
                         </button>
@@ -437,27 +429,27 @@ export function WorkflowInterface() {
                       <div className="flex gap-6 overflow-x-auto pb-10 snap-x snap-mandatory no-scrollbar scroll-smooth">
                         {workflow.nodes.map((node, i) => (
                           <div key={node.id} className="flex-shrink-0 w-80 snap-center">
-                            <div className="bg-white/[0.02] border border-white/10 rounded-[2.5rem] p-6 hover:border-violet-500/40 transition-all duration-700 transform hover:-translate-y-2 group/node">
+                            <div className="bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/10 rounded-[2.5rem] p-6 hover:border-violet-500/40 transition-all duration-700 transform hover:-translate-y-2 group/node">
                               <div className="flex items-center justify-between mb-6">
-                                <span className="text-[0.6rem] font-black text-gray-800 uppercase tracking-widest leading-none">{node.type === 'trigger' ? 'TRIGGER' : `NODE: ${(i).toString().padStart(2, '0')}`}</span>
-                                <div className="w-10 h-10 rounded-2xl bg-white/5 flex items-center justify-center group-hover/node:rotate-12 transition-transform">
+                                <span className="text-[0.6rem] font-black text-gray-400 dark:text-gray-800 uppercase tracking-widest leading-none">{node.type === 'trigger' ? 'TRIGGER' : `NODE: ${(i).toString().padStart(2, '0')}`}</span>
+                                <div className="w-10 h-10 rounded-2xl bg-gray-100 dark:bg-white/5 flex items-center justify-center group-hover/node:rotate-12 transition-transform">
                                   <MessageSquare className="w-5 h-5 text-violet-500/70" />
                                 </div>
                               </div>
-                              <h6 className="text-white font-black mb-3 truncate pr-4 text-base tracking-tight">{node.name}</h6>
+                              <h6 className="text-gray-900 dark:text-white font-black mb-3 truncate pr-4 text-base tracking-tight">{node.name}</h6>
                               <p className="text-gray-500 text-xs line-clamp-3 mb-6 leading-relaxed font-medium">{node.message}</p>
 
                               <div className="space-y-2">
                                 {workflow.edges.filter(e => e.source === node.id).map((edge) => {
                                   const target = workflow.nodes.find(n => n.id === edge.target);
                                   return (
-                                    <div key={edge.id} className="flex items-center justify-between px-4 py-2.5 bg-black/40 rounded-2xl border border-white/5 group/opt">
-                                      <span className="text-[0.65rem] font-bold text-gray-500 truncate group-hover/opt:text-white transition-colors">{target?.name || 'End'}</span>
+                                    <div key={edge.id} className="flex items-center justify-between px-4 py-2.5 bg-gray-50 dark:bg-black/40 rounded-2xl border border-gray-200 dark:border-white/5 group/opt">
+                                      <span className="text-[0.65rem] font-bold text-gray-500 truncate group-hover/opt:text-gray-900 dark:group-hover/opt:text-white transition-colors">{target?.name || 'End'}</span>
                                       <ArrowRight className="w-3.5 h-3.5 text-violet-600/30 group-hover/opt:text-violet-600 transition-colors" />
                                     </div>
                                   );
                                 })}
-                                {!workflow.edges.filter(e => e.source === node.id).length && <div className="text-center py-3 text-gray-800 text-[0.6rem] font-black uppercase tracking-[0.2em]">End of Flow</div>}
+                                {!workflow.edges.filter(e => e.source === node.id).length && <div className="text-center py-3 text-gray-300 dark:text-gray-800 text-[0.6rem] font-black uppercase tracking-[0.2em]">End of Flow</div>}
                               </div>
                             </div>
                           </div>
@@ -465,7 +457,7 @@ export function WorkflowInterface() {
                       </div>
                     ) : (
                       <div className="overflow-auto pb-10">
-                        <div className="relative min-w-[980px] h-[420px] rounded-[2rem] border border-white/10 bg-white/[0.02]">
+                        <div className="relative min-w-[980px] h-[420px] rounded-[2rem] border border-gray-200 dark:border-white/10 bg-gray-100 dark:bg-white/[0.02]">
                           <svg className="absolute inset-0 w-full h-full pointer-events-none">
                             {workflow.edges.map((edge) => {
                               const sourceNode = workflow.nodes.find((n) => n.id === edge.source);
@@ -526,16 +518,16 @@ export function WorkflowInterface() {
                             return (
                               <div
                                 key={node.id}
-                                className="absolute w-[180px] h-[86px] rounded-2xl border border-white/10 bg-black/40 p-3"
+                                className="absolute w-[180px] h-[86px] rounded-2xl border border-gray-200 dark:border-white/10 bg-white dark:bg-black/40 p-3"
                                 style={{ left, top }}
                               >
                                 <div className="flex items-center justify-between mb-2">
-                                  <span className="text-[0.52rem] font-black text-gray-700 uppercase tracking-widest">
+                                  <span className="text-[0.52rem] font-black text-gray-400 dark:text-gray-700 uppercase tracking-widest">
                                     {node.type === 'trigger' ? 'Trigger' : `Node ${index + 1}`}
                                   </span>
                                   <span className="w-2 h-2 rounded-full bg-violet-500/70" />
                                 </div>
-                                <p className="text-white text-xs font-bold truncate">{node.name}</p>
+                                <p className="text-gray-900 dark:text-white text-xs font-bold truncate">{node.name}</p>
                                 <p className="text-gray-500 text-[0.62rem] mt-1 truncate">{node.message || 'No message'}</p>
                               </div>
                             );
@@ -544,7 +536,7 @@ export function WorkflowInterface() {
                       </div>
                     )}
 
-                    <div className="flex gap-4 p-8 items-center bg-[#0d0d12] rounded-3xl mt-4">
+                    <div className="flex gap-4 p-8 items-center bg-gray-100 dark:bg-[#0d0d12] rounded-3xl mt-4">
                       <div className="flex items-center gap-4 flex-1">
                         <button
                           type="button"
@@ -557,7 +549,7 @@ export function WorkflowInterface() {
                         <button
                           type="button"
                           onClick={() => navigate(`/app/workflows/${workflow.id}?panel=simulate`)}
-                          className="flex items-center gap-3 px-8 py-4 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/30 text-indigo-300 rounded-3xl transition-all font-black text-xs uppercase tracking-widest"
+                          className="flex items-center gap-3 px-8 py-4 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/30 text-indigo-500 dark:text-indigo-300 rounded-3xl transition-all font-black text-xs uppercase tracking-widest"
                         >
                           <Play className="w-4 h-4" /> Simulate
                         </button>
@@ -565,12 +557,12 @@ export function WorkflowInterface() {
                         <button
                           type="button"
                           onClick={() => handleDuplicate(workflow)}
-                          className="flex items-center gap-3 px-8 py-4 bg-white/5 hover:bg-white/10 border border-white/5 text-gray-400 rounded-3xl transition-all font-black text-xs uppercase tracking-widest"
+                          className="flex items-center gap-3 px-8 py-4 bg-gray-200 dark:bg-white/5 hover:bg-gray-300 dark:hover:bg-white/10 border border-gray-200 dark:border-white/5 text-gray-600 dark:text-gray-400 rounded-3xl transition-all font-black text-xs uppercase tracking-widest"
                         >
                           <Copy className="w-4 h-4" /> Duplicate
                         </button>
 
-                        <div className="h-6 w-px bg-white/10 mx-2" />
+                        <div className="h-6 w-px bg-gray-200 dark:bg-white/10 mx-2" />
 
                         {workflow.status === "active" ? (
                           <button
@@ -619,4 +611,3 @@ export function WorkflowInterface() {
     </div>
   );
 }
-

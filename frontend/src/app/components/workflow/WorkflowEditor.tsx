@@ -100,7 +100,7 @@ function VisualFlowCanvas({
     nodes: WorkflowNode[];
     edges: WorkflowEdge[];
     updateNode: (id: string, patch: Partial<WorkflowNode>) => void;
-    addNode: () => void;
+    addNode: (viewState: { x: number; y: number; zoom: number }, canvasEl: HTMLDivElement | null) => void;
     removeNode: (id: string) => void;
     addEdge: (sourceId: string, targetId: string) => void;
     removeEdge: (id: string) => void;
@@ -112,6 +112,36 @@ function VisualFlowCanvas({
     const [viewState, setViewState] = useState({ x: 0, y: 0, zoom: 1 });
     const lastTouchDistanceRef = useRef<number>(0);
 
+    // --- FIX 2: custom pan state instead of motion.div drag ---
+    const isPanningRef = useRef(false);
+    const lastPanPosRef = useRef({ x: 0, y: 0 });
+
+    // --- FIX 3: selection state ---
+    const [selectedId, setSelectedId] = useState<string | null>(null);
+    const [selectedType, setSelectedType] = useState<'node' | 'edge' | null>(null);
+
+    // Delete key handler for selected node/edge
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+            // don't fire when user is typing in an input/textarea
+            const tag = (e.target as HTMLElement).tagName;
+            if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+            if (!selectedId) return;
+            if (selectedType === 'node') {
+                removeNode(selectedId);
+                setSelectedId(null);
+                setSelectedType(null);
+            } else if (selectedType === 'edge') {
+                removeEdge(selectedId);
+                setSelectedId(null);
+                setSelectedType(null);
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [selectedId, selectedType, removeNode, removeEdge]);
+
     useEffect(() => {
         const handleMouseMove = (e: MouseEvent) => {
             if (connectingSource) {
@@ -122,10 +152,18 @@ function VisualFlowCanvas({
                     y: (e.clientY - rect.top - viewState.y) / viewState.zoom
                 });
             }
+            // FIX 2: pan on drag
+            if (isPanningRef.current) {
+                const dx = e.clientX - lastPanPosRef.current.x;
+                const dy = e.clientY - lastPanPosRef.current.y;
+                lastPanPosRef.current = { x: e.clientX, y: e.clientY };
+                setViewState(prev => ({ ...prev, x: prev.x + dx, y: prev.y + dy }));
+            }
         };
 
         const handleMouseUp = () => {
             setConnectingSource(null);
+            isPanningRef.current = false;
         };
 
         window.addEventListener('mousemove', handleMouseMove);
@@ -136,8 +174,18 @@ function VisualFlowCanvas({
         };
     }, [connectingSource, viewState.x, viewState.y, viewState.zoom]);
 
+    const handleCanvasMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+        // Only start panning if the click target is the canvas background (not a child node/button/svg)
+        if (e.target === canvasRef.current || (e.target as HTMLElement).dataset.canvasBg === 'true') {
+            isPanningRef.current = true;
+            lastPanPosRef.current = { x: e.clientX, y: e.clientY };
+            // Deselect when clicking background
+            setSelectedId(null);
+            setSelectedType(null);
+        }
+    };
+
     const handleWheel = (e: React.WheelEvent) => {
-        // Allow zoom with regular scroll, or with ctrl/meta + scroll
         const delta = e.deltaY * -0.002;
         const newZoom = Math.min(Math.max(viewState.zoom + delta, 0.2), 2);
         setViewState(prev => ({ ...prev, zoom: newZoom }));
@@ -184,7 +232,11 @@ function VisualFlowCanvas({
 
     const renderEdges = () => {
         return (
-            <svg className="absolute inset-0 w-full h-full pointer-events-none overflow-visible">
+            <svg
+                className="absolute inset-0 w-full h-full overflow-visible"
+                style={{ pointerEvents: 'none' }}
+                data-canvas-bg="true"
+            >
                 <defs>
                     <linearGradient id="edgeGradient" x1="0%" y1="0%" x2="100%" y2="0%">
                         <stop offset="0%" stopColor="#8b5cf6" stopOpacity="0.4" />
@@ -194,6 +246,9 @@ function VisualFlowCanvas({
                     <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
                         <polygon points="0 0, 10 3.5, 0 7" fill="#8b5cf6" />
                     </marker>
+                    <marker id="arrowhead-selected" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                        <polygon points="0 0, 10 3.5, 0 7" fill="#f87171" />
+                    </marker>
                 </defs>
 
                 {edges.map((edge) => {
@@ -202,6 +257,8 @@ function VisualFlowCanvas({
                     const sourceEl = nodeRefs.current[edge.source];
                     if (!sourceNode || !targetNode || !sourceEl) return null;
 
+                    const isSelected = selectedId === edge.id && selectedType === 'edge';
+
                     const x1 = (sourceNode.position?.x || 0) + 70;
                     const y1 = (sourceNode.position?.y || 0) + sourceEl.offsetHeight - 5;
                     const x2 = (targetNode.position?.x || 0) + 70;
@@ -209,16 +266,26 @@ function VisualFlowCanvas({
 
                     const cp1y = y1 + Math.abs(y2 - y1) / 2;
                     const cp2y = y2 - Math.abs(y2 - y1) / 2;
+                    const d = `M ${x1} ${y1} C ${x1} ${cp1y}, ${x2} ${cp2y}, ${x2} ${y2}`;
 
                     return (
-                        <path
-                            key={edge.id}
-                            d={`M ${x1} ${y1} C ${x1} ${cp1y}, ${x2} ${cp2y}, ${x2} ${y2}`}
-                            fill="none"
-                            stroke="url(#edgeGradient)"
-                            strokeWidth="2"
-                            markerEnd="url(#arrowhead)"
-                        />
+                        <g key={edge.id} style={{ pointerEvents: 'all', cursor: 'pointer' }}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedId(edge.id);
+                                setSelectedType('edge');
+                            }}
+                        >
+                            {/* Invisible thick hit area */}
+                            <path d={d} fill="none" stroke="transparent" strokeWidth="12" />
+                            <path
+                                d={d}
+                                fill="none"
+                                stroke={isSelected ? '#f87171' : 'url(#edgeGradient)'}
+                                strokeWidth={isSelected ? 2.5 : 2}
+                                markerEnd={isSelected ? 'url(#arrowhead-selected)' : 'url(#arrowhead)'}
+                            />
+                        </g>
                     );
                 })}
 
@@ -241,6 +308,7 @@ function VisualFlowCanvas({
                             strokeOpacity="0.8"
                             strokeDasharray="4,4"
                             className="animate-[dash_1s_linear_infinite]"
+                            style={{ pointerEvents: 'none' }}
                         />
                     );
                 })()}
@@ -251,151 +319,190 @@ function VisualFlowCanvas({
     return (
         <div
             ref={canvasRef}
-            className="flex-1 w-full h-full bg-[#08080c] relative overflow-hidden select-none"
-            style={{ backgroundImage: 'radial-gradient(circle, #1a1a24 1px, transparent 1px)', backgroundSize: '50px 50px' }}
+            className="flex-1 w-full h-full bg-gray-100 dark:bg-[#08080c] relative overflow-hidden select-none cursor-grab active:cursor-grabbing"
+            style={{ backgroundImage: 'radial-gradient(circle, rgba(139,92,246,0.08) 1px, transparent 1px)', backgroundSize: '50px 50px' }}
             onWheel={handleWheel}
+            onMouseDown={handleCanvasMouseDown}
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
+            data-canvas-bg="true"
         >
             <style>{`
                 @keyframes dash { to { stroke-dashoffset: -8; } }
             `}</style>
 
-            <motion.div
-                drag
-                dragMomentum={false}
-                onDrag={(_, info) => setViewState(prev => ({ ...prev, x: prev.x + info.delta.x, y: prev.y + info.delta.y }))}
-                style={{ x: viewState.x, y: viewState.y, scale: viewState.zoom }}
-                className="absolute inset-0 w-full h-full cursor-grab active:cursor-grabbing"
+            {/* Non-draggable transform wrapper */}
+            <div
+                data-canvas-bg="true"
+                style={{
+                    position: 'absolute',
+                    inset: 0,
+                    transform: `translate(${viewState.x}px, ${viewState.y}px) scale(${viewState.zoom})`,
+                    transformOrigin: '0 0',
+                    width: '100%',
+                    height: '100%',
+                }}
             >
                 {renderEdges()}
 
-                {nodes.map((node) => (
-                    <motion.div
-                        key={node.id}
-                        ref={(el) => { nodeRefs.current[node.id] = el; }}
-                        drag
-                        dragMomentum={false}
-                        onDragEnd={(_, info) => {
-                            const newX = (node.position?.x || 0) + info.offset.x / viewState.zoom;
-                            const newY = (node.position?.y || 0) + info.offset.y / viewState.zoom;
-                            updateNode(node.id, { position: { x: newX, y: newY } });
-                        }}
-                        initial={node.position}
-                        animate={{ x: node.position?.x, y: node.position?.y }}
-                        className={`absolute w-[140px] bg-[#16161e] border-2 ${node.type === 'trigger' ? 'border-amber-500/40' : 'border-white/10'} rounded-xl shadow-xl cursor-grab active:cursor-grabbing hover:border-violet-600/50 transition-colors z-10 p-0`}
-                        onMouseUp={(e) => {
-                            if (connectingSource && connectingSource !== node.id) {
-                                addEdge(connectingSource, node.id);
+                {nodes.map((node) => {
+                    const isSelectedNode = selectedId === node.id && selectedType === 'node';
+                    return (
+                        <motion.div
+                            key={node.id}
+                            ref={(el) => { nodeRefs.current[node.id] = el; }}
+                            drag
+                            dragMomentum={false}
+                            onDragEnd={(_, info) => {
+                                const newX = (node.position?.x || 0) + info.offset.x / viewState.zoom;
+                                const newY = (node.position?.y || 0) + info.offset.y / viewState.zoom;
+                                updateNode(node.id, { position: { x: newX, y: newY } });
+                            }}
+                            initial={node.position}
+                            animate={{ x: node.position?.x, y: node.position?.y }}
+                            className={`absolute w-[140px] bg-[#16161e] border-2 rounded-xl shadow-xl cursor-grab active:cursor-grabbing transition-colors z-10 p-0
+                                ${isSelectedNode
+                                    ? 'border-violet-400 shadow-[0_0_20px_rgba(139,92,246,0.35)]'
+                                    : node.type === 'trigger'
+                                        ? 'border-amber-500/40 hover:border-violet-600/50'
+                                        : 'border-white/10 hover:border-violet-600/50'
+                                }`}
+                            onMouseDown={(e) => {
+                                // stop so the canvas pan doesn't start
                                 e.stopPropagation();
-                            }
-                        }}
-                    >
-                        {node.type !== 'trigger' && (
+                            }}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                if (connectingSource && connectingSource !== node.id) {
+                                    addEdge(connectingSource, node.id);
+                                    setConnectingSource(null);
+                                } else {
+                                    setSelectedId(node.id);
+                                    setSelectedType('node');
+                                }
+                            }}
+                            onMouseUp={(e) => {
+                                if (connectingSource && connectingSource !== node.id) {
+                                    addEdge(connectingSource, node.id);
+                                    e.stopPropagation();
+                                }
+                            }}
+                        >
+                            {node.type !== 'trigger' && (
+                                <div
+                                    className="absolute top-[-8px] left-1/2 transform -translate-x-1/2 w-4 h-4 bg-violet-600 rounded-full border-2 border-gray-100 dark:border-[#08080c] cursor-pointer hover:scale-125 transition-transform z-20 shadow-[0_0_10px_rgba(139,92,246,0.5)] flex items-center justify-center group"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (connectingSource && connectingSource !== node.id) {
+                                            addEdge(connectingSource, node.id);
+                                            setConnectingSource(null);
+                                        }
+                                    }}
+                                >
+                                    <div className="w-1 h-1 bg-white rounded-full group-hover:scale-150 transition-transform" />
+                                </div>
+                            )}
+
+                            <div className="flex items-center justify-between p-2.5 bg-gray-100 dark:bg-black/20 rounded-t-2xl">
+                                <div className="flex items-center gap-1.5">
+                                    <span className="text-[0.55rem] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest">{node.type === 'trigger' ? 'TRIGGER' : 'ACTION'}</span>
+                                    {node.type === 'trigger' && <Zap className="w-2.5 h-2.5 text-amber-500" />}
+                                </div>
+                                {node.type !== 'trigger' && (
+                                    <button type="button" onClick={(e) => { e.stopPropagation(); removeNode(node.id); }} className="text-gray-600 hover:text-red-400 transition-colors">
+                                        <Icons.Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                )}
+                            </div>
+
+                            <div className="p-3 space-y-4">
+                                <div className="space-y-1">
+                                    <label className="text-[0.55rem] font-black text-gray-400 dark:text-gray-600 uppercase tracking-widest block">{node.type === 'trigger' ? 'Trigger Label' : 'Button Name'}</label>
+                                    <input
+                                        type="text"
+                                        value={node.name}
+                                        onChange={(e) => updateNode(node.id, { name: e.target.value })}
+                                        className="w-full bg-gray-100 dark:bg-white/5 border border-gray-200 dark:border-white/5 rounded-xl px-3 py-1.5 text-gray-900 dark:text-white font-bold text-xs focus:outline-none focus:border-violet-500/30 transition-all font-outfit"
+                                    />
+                                </div>
+
+                                <div className="space-y-1">
+                                    <label className="text-[0.55rem] font-black text-gray-400 dark:text-gray-600 uppercase tracking-widest block">Bot Message</label>
+                                    <textarea
+                                        value={node.message}
+                                        onChange={(e) => updateNode(node.id, { message: e.target.value })}
+                                        className="w-full bg-gray-50 dark:bg-black/40 border border-gray-200 dark:border-white/5 rounded-xl p-3 text-gray-900 dark:text-white text-[0.7rem] font-medium focus:outline-none focus:border-violet-500/30 resize-none h-16 leading-tight scrollbar-hide"
+                                    />
+                                </div>
+
+                                <div className="pt-1">
+                                    <div className="flex items-center justify-between mb-1.5">
+                                        <span className="text-[0.55rem] font-black text-gray-400 dark:text-gray-600 uppercase tracking-widest">Paths</span>
+                                        <span className="text-[0.55rem] font-bold text-violet-400">{edges.filter(e => e.source === node.id).length}</span>
+                                    </div>
+                                    <div className="flex flex-wrap gap-1">
+                                        {edges.filter(e => e.source === node.id).map(edge => {
+                                            const target = nodes.find(n => n.id === edge.target);
+                                            return (
+                                                <div key={edge.id} className="group relative flex items-center gap-1 px-2 py-1 bg-gray-100 dark:bg-white/5 rounded-lg border border-gray-200 dark:border-white/5">
+                                                    <span className="text-[0.5rem] font-bold text-gray-500 dark:text-gray-400 truncate max-w-[60px]">{target?.name || 'End'}</span>
+                                                    <button onClick={(e) => { e.stopPropagation(); removeEdge(edge.id); }} className="text-gray-700 hover:text-red-400 transition-colors">
+                                                        <Icons.X className="w-2 h-2" />
+                                                    </button>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            </div>
+
                             <div
-                                className="absolute top-[-8px] left-1/2 transform -translate-x-1/2 w-4 h-4 bg-violet-600 rounded-full border-2 border-[#08080c] cursor-pointer hover:scale-125 transition-transform z-20 shadow-[0_0_10px_rgba(139,92,246,0.5)] flex items-center justify-center group"
+                                className="absolute bottom-[-8px] left-1/2 transform -translate-x-1/2 w-4 h-4 bg-violet-600 rounded-full border-2 border-gray-100 dark:border-[#08080c] cursor-pointer hover:scale-125 transition-transform z-20 shadow-[0_0_10px_rgba(139,92,246,0.5)] flex items-center justify-center group"
                                 onClick={(e) => {
                                     e.stopPropagation();
-                                    if (connectingSource && connectingSource !== node.id) {
-                                        addEdge(connectingSource, node.id);
-                                        setConnectingSource(null);
-                                    }
+                                    setConnectingSource(node.id);
                                 }}
                             >
                                 <div className="w-1 h-1 bg-white rounded-full group-hover:scale-150 transition-transform" />
                             </div>
-                        )}
-
-                        <div className="flex items-center justify-between p-2.5 bg-black/20 rounded-t-2xl">
-                            <div className="flex items-center gap-1.5">
-                                <span className="text-[0.55rem] font-black text-gray-500 uppercase tracking-widest">{node.type === 'trigger' ? 'TRIGGER' : 'ACTION'}</span>
-                                {node.type === 'trigger' && <Zap className="w-2.5 h-2.5 text-amber-500" />}
-                            </div>
-                            {node.type !== 'trigger' && (
-                                <button type="button" onClick={(e) => { e.stopPropagation(); removeNode(node.id); }} className="text-gray-600 hover:text-red-400 transition-colors">
-                                    <Icons.Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                            )}
-                        </div>
-
-                        <div className="p-3 space-y-4">
-                            <div className="space-y-1">
-                                <label className="text-[0.55rem] font-black text-gray-600 uppercase tracking-widest block">{node.type === 'trigger' ? 'Trigger Label' : 'Button Name'}</label>
-                                <input
-                                    type="text"
-                                    value={node.name}
-                                    onChange={(e) => updateNode(node.id, { name: e.target.value })}
-                                    className="w-full bg-white/5 border border-white/5 rounded-xl px-3 py-1.5 text-white font-bold text-xs focus:outline-none focus:border-violet-500/30 transition-all font-outfit"
-                                />
-                            </div>
-
-                            <div className="space-y-1">
-                                <label className="text-[0.55rem] font-black text-gray-600 uppercase tracking-widest block">Bot Message</label>
-                                <textarea
-                                    value={node.message}
-                                    onChange={(e) => updateNode(node.id, { message: e.target.value })}
-                                    className="w-full bg-black/40 border border-white/5 rounded-xl p-3 text-white text-[0.7rem] font-medium focus:outline-none focus:border-violet-500/30 resize-none h-16 leading-tight scrollbar-hide"
-                                />
-                            </div>
-
-                            <div className="pt-1">
-                                <div className="flex items-center justify-between mb-1.5">
-                                    <span className="text-[0.55rem] font-black text-gray-600 uppercase tracking-widest">Paths</span>
-                                    <span className="text-[0.55rem] font-bold text-violet-400">{edges.filter(e => e.source === node.id).length}</span>
-                                </div>
-                                <div className="flex flex-wrap gap-1">
-                                    {edges.filter(e => e.source === node.id).map(edge => {
-                                        const target = nodes.find(n => n.id === edge.target);
-                                        return (
-                                            <div key={edge.id} className="group relative flex items-center gap-1 px-2 py-1 bg-white/5 rounded-lg border border-white/5">
-                                                <span className="text-[0.5rem] font-bold text-gray-400 truncate max-w-[60px]">{target?.name || 'End'}</span>
-                                                <button onClick={(e) => { e.stopPropagation(); removeEdge(edge.id); }} className="text-gray-700 hover:text-red-400 transition-colors">
-                                                    <Icons.X className="w-2 h-2" />
-                                                </button>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-                        </div>
-
-                        <div
-                            className="absolute bottom-[-8px] left-1/2 transform -translate-x-1/2 w-4 h-4 bg-violet-600 rounded-full border-2 border-[#08080c] cursor-pointer hover:scale-125 transition-transform z-20 shadow-[0_0_10px_rgba(139,92,246,0.5)] flex items-center justify-center group"
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                setConnectingSource(node.id);
-                            }}
-                        >
-                            <div className="w-1 h-1 bg-white rounded-full group-hover:scale-150 transition-transform" />
-                        </div>
-                    </motion.div>
-                ))}
-            </motion.div>
+                        </motion.div>
+                    );
+                })}
+            </div>
 
             {/* Zoom Controls */}
             <div className="absolute bottom-10 left-10 flex flex-col gap-2 z-50">
-                <button onClick={() => setViewState(v => ({ ...v, zoom: Math.min(v.zoom + 0.1, 2) }))} className="w-10 h-10 bg-[#16161c] border border-white/10 rounded-xl flex items-center justify-center text-gray-400 hover:text-white transition-all shadow-xl">
+                <button onClick={() => setViewState(v => ({ ...v, zoom: Math.min(v.zoom + 0.1, 2) }))} className="w-10 h-10 bg-white dark:bg-[#16161c] border border-gray-200 dark:border-white/10 rounded-xl flex items-center justify-center text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-all shadow-xl">
                     <Icons.Plus className="w-5 h-5" />
                 </button>
-                <div className="w-10 h-10 bg-[#16161c] border border-white/10 rounded-xl flex items-center justify-center text-[0.6rem] font-black text-gray-500">
+                <div className="w-10 h-10 bg-white dark:bg-[#16161c] border border-gray-200 dark:border-white/10 rounded-xl flex items-center justify-center text-[0.6rem] font-black text-gray-400 dark:text-gray-500">
                     {Math.round(viewState.zoom * 100)}%
                 </div>
-                <button onClick={() => setViewState(v => ({ ...v, zoom: Math.max(v.zoom - 0.1, 0.2) }))} className="w-10 h-10 bg-[#16161c] border border-white/10 rounded-xl flex items-center justify-center text-gray-400 hover:text-white transition-all shadow-xl">
+                <button onClick={() => setViewState(v => ({ ...v, zoom: Math.max(v.zoom - 0.1, 0.2) }))} className="w-10 h-10 bg-white dark:bg-[#16161c] border border-gray-200 dark:border-white/10 rounded-xl flex items-center justify-center text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-all shadow-xl">
                     <Icons.Minus className="w-5 h-5" />
                 </button>
-                <button onClick={() => setViewState({ x: 0, y: 0, zoom: 1 })} className="w-10 h-10 bg-[#16161c] border border-white/10 rounded-xl flex items-center justify-center text-gray-400 hover:text-white transition-all shadow-xl mt-2">
+                <button onClick={() => setViewState({ x: 0, y: 0, zoom: 1 })} className="w-10 h-10 bg-white dark:bg-[#16161c] border border-gray-200 dark:border-white/10 rounded-xl flex items-center justify-center text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-all shadow-xl mt-2">
                     <Icons.Maximize className="w-5 h-5" />
                 </button>
             </div>
 
+            {/* FIX 1: Add Node at viewport centre */}
             <button
                 type="button"
-                onClick={addNode}
+                onClick={() => addNode(viewState, canvasRef.current)}
                 className="absolute bottom-10 right-10 w-20 h-20 bg-gradient-to-br from-violet-600 to-indigo-700 hover:scale-110 active:scale-95 rounded-[2rem] flex items-center justify-center text-white shadow-3xl shadow-violet-600/30 z-50 transition-all duration-300"
             >
                 <Icons.Plus className="w-10 h-10" />
             </button>
+
+            {/* Selected hint */}
+            {selectedId && (
+                <div className="absolute top-4 left-1/2 transform -translate-x-1/2 px-5 py-2.5 bg-white/90 dark:bg-[#16161c]/90 backdrop-blur-md rounded-full text-gray-600 dark:text-gray-300 font-bold text-xs uppercase tracking-[0.15em] shadow-xl z-[100] flex items-center gap-2 border border-gray-200 dark:border-white/10">
+                    <Icons.Trash2 className="w-3.5 h-3.5 text-red-400" />
+                    Press <kbd className="px-1.5 py-0.5 bg-gray-200 dark:bg-white/10 rounded text-gray-900 dark:text-white">Delete</kbd> to remove selected {selectedType}
+                </div>
+            )}
 
             {connectingSource && (
                 <div className="absolute top-10 left-1/2 transform -translate-x-1/2 px-8 py-4 bg-violet-600/90 backdrop-blur-md rounded-full text-white font-black text-xs uppercase tracking-[0.2em] shadow-2xl z-[100] animate-bounce">
@@ -414,34 +521,34 @@ function WorkflowVisualPreview({
     edges: WorkflowEdge[];
 }) {
     return (
-        <div className="h-full overflow-y-auto bg-[#08080c] p-8">
+        <div className="h-full overflow-y-auto bg-gray-50 dark:bg-[#08080c] p-8">
             <div className="flex items-center justify-between mb-6 px-1">
-                <h4 className="text-white font-black uppercase tracking-[0.24em] text-[0.65rem]">Flow Structure</h4>
-                <p className="text-gray-600 text-xs font-bold uppercase tracking-widest">Visual Preview</p>
+                <h4 className="text-gray-900 dark:text-white font-black uppercase tracking-[0.24em] text-[0.65rem]">Flow Structure</h4>
+                <p className="text-gray-400 dark:text-gray-600 text-xs font-bold uppercase tracking-widest">Visual Preview</p>
             </div>
 
             <div className="flex gap-6 overflow-x-auto pb-10 snap-x snap-mandatory no-scrollbar scroll-smooth">
                 {nodes.map((node, index) => (
                     <div key={node.id} className="flex-shrink-0 w-80 snap-center">
-                        <div className="bg-white/[0.02] border border-white/10 rounded-[2.5rem] p-6 hover:border-violet-500/40 transition-all duration-700 transform hover:-translate-y-1.5 group/node">
+                        <div className="bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/10 rounded-[2.5rem] p-6 hover:border-violet-500/40 transition-all duration-700 transform hover:-translate-y-1.5 group/node">
                             <div className="flex items-center justify-between mb-6">
-                                <span className="text-[0.6rem] font-black text-gray-800 uppercase tracking-widest leading-none">
+                                <span className="text-[0.6rem] font-black text-gray-400 dark:text-gray-800 uppercase tracking-widest leading-none">
                                     {node.type === 'trigger' ? 'TRIGGER' : `NODE: ${index.toString().padStart(2, '0')}`}
                                 </span>
-                                <div className="w-10 h-10 rounded-2xl bg-white/5 flex items-center justify-center group-hover/node:rotate-12 transition-transform">
+                                <div className="w-10 h-10 rounded-2xl bg-gray-100 dark:bg-white/5 flex items-center justify-center group-hover/node:rotate-12 transition-transform">
                                     <Icons.MessageSquare className="w-5 h-5 text-violet-500/70" />
                                 </div>
                             </div>
 
-                            <h6 className="text-white font-black mb-3 truncate pr-4 text-base tracking-tight">{node.name || 'Untitled Node'}</h6>
+                            <h6 className="text-gray-900 dark:text-white font-black mb-3 truncate pr-4 text-base tracking-tight">{node.name || 'Untitled Node'}</h6>
                             <p className="text-gray-500 text-xs line-clamp-3 mb-6 leading-relaxed font-medium">{node.message || 'No message configured.'}</p>
 
                             <div className="space-y-2">
                                 {edges.filter((edge) => edge.source === node.id).map((edge) => {
                                     const targetNode = nodes.find((item) => item.id === edge.target);
                                     return (
-                                        <div key={edge.id} className="flex items-center justify-between px-4 py-2.5 bg-black/40 rounded-2xl border border-white/5 group/opt">
-                                            <span className="text-[0.65rem] font-bold text-gray-500 truncate group-hover/opt:text-white transition-colors">
+                                        <div key={edge.id} className="flex items-center justify-between px-4 py-2.5 bg-gray-50 dark:bg-black/40 rounded-2xl border border-gray-200 dark:border-white/5 group/opt">
+                                            <span className="text-[0.65rem] font-bold text-gray-500 truncate group-hover/opt:text-gray-900 dark:group-hover/opt:text-white transition-colors">
                                                 {targetNode?.name || 'End'}
                                             </span>
                                             <ArrowRight className="w-3.5 h-3.5 text-violet-600/30 group-hover/opt:text-violet-600 transition-colors" />
@@ -450,7 +557,7 @@ function WorkflowVisualPreview({
                                 })}
 
                                 {!edges.some((edge) => edge.source === node.id) && (
-                                    <div className="text-center py-3 text-gray-800 text-[0.6rem] font-black uppercase tracking-[0.2em]">End of Flow</div>
+                                    <div className="text-center py-3 text-gray-300 dark:text-gray-800 text-[0.6rem] font-black uppercase tracking-[0.2em]">End of Flow</div>
                                 )}
                             </div>
                         </div>
@@ -459,7 +566,7 @@ function WorkflowVisualPreview({
             </div>
 
             {nodes.length === 0 && (
-                <div className="rounded-3xl border border-white/10 bg-white/[0.02] p-10 text-center">
+                <div className="rounded-3xl border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.02] p-10 text-center">
                     <p className="text-gray-500 text-sm font-medium">No nodes to preview yet.</p>
                 </div>
             )}
@@ -483,11 +590,11 @@ function WorkflowSimulation({
     onSelectOption: (edgeId: string) => void;
 }) {
     return (
-        <div className="h-full overflow-y-auto bg-[#08080c] p-8">
+        <div className="h-full overflow-y-auto bg-gray-50 dark:bg-[#08080c] p-8">
             <div className="flex items-center justify-between mb-6">
                 <div>
-                    <h4 className="text-white font-black uppercase tracking-[0.24em] text-[0.65rem]">Simulation</h4>
-                    <p className="text-gray-600 text-xs font-bold uppercase tracking-widest mt-1">Test your flow before saving</p>
+                    <h4 className="text-gray-900 dark:text-white font-black uppercase tracking-[0.24em] text-[0.65rem]">Simulation</h4>
+                    <p className="text-gray-400 dark:text-gray-600 text-xs font-bold uppercase tracking-widest mt-1">Test your flow before saving</p>
                 </div>
                 <div className="flex items-center gap-2">
                     {!running ? (
@@ -502,7 +609,7 @@ function WorkflowSimulation({
                         <button
                             type="button"
                             onClick={onReset}
-                            className="px-4 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 rounded-xl font-bold text-xs uppercase tracking-wider flex items-center gap-2"
+                            className="px-4 py-2.5 bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 border border-gray-200 dark:border-white/10 text-gray-600 dark:text-gray-300 rounded-xl font-bold text-xs uppercase tracking-wider flex items-center gap-2"
                         >
                             <Icons.RotateCcw className="w-4 h-4" /> Reset
                         </button>
@@ -510,7 +617,7 @@ function WorkflowSimulation({
                 </div>
             </div>
 
-            <div className="bg-white/[0.02] border border-white/10 rounded-3xl p-5 min-h-[320px] flex flex-col">
+            <div className="bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/10 rounded-3xl p-5 min-h-[320px] flex flex-col">
                 {messages.length === 0 ? (
                     <div className="flex-1 flex items-center justify-center text-gray-600 text-sm">
                         Start simulation to run this workflow.
@@ -521,7 +628,7 @@ function WorkflowSimulation({
                             <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                                 <div className={`max-w-[80%] px-4 py-2.5 rounded-2xl text-sm ${message.role === 'user'
                                     ? 'bg-violet-600 text-white rounded-tr-md'
-                                    : 'bg-white/8 border border-white/10 text-gray-200 rounded-tl-md'
+                                    : 'bg-gray-100 dark:bg-white/8 border border-gray-200 dark:border-white/10 text-gray-700 dark:text-gray-200 rounded-tl-md'
                                     }`}>
                                     {message.content}
                                 </div>
@@ -617,13 +724,18 @@ export function WorkflowEditor() {
         }
     };
 
-    const addNode = () => {
+    const addNode = (viewState: { x: number; y: number; zoom: number }, canvasEl: HTMLDivElement | null) => {
+        // FIX 1: place at viewport centre in world-space
+        const canvasW = canvasEl?.clientWidth ?? 800;
+        const canvasH = canvasEl?.clientHeight ?? 600;
+        const worldX = (canvasW / 2 - viewState.x) / viewState.zoom - 70;
+        const worldY = (canvasH / 2 - viewState.y) / viewState.zoom - 80;
         const newNode: WorkflowNode = {
             id: `node_${Date.now()}`,
             type: "action",
             name: "New Button",
             message: "What should the bot say?",
-            position: { x: (nodes.length * 180) + 100, y: 200 },
+            position: { x: worldX, y: worldY },
         };
         setNodes((prev) => [...prev, newNode]);
     };
@@ -763,17 +875,17 @@ export function WorkflowEditor() {
     };
 
     if (loading) return (
-        <div className="h-full flex items-center justify-center bg-[#08080c]">
+        <div className="h-full flex items-center justify-center bg-gray-50 dark:bg-[#08080c]">
             <RefreshCw className="w-8 h-8 text-violet-500 animate-spin" />
         </div>
     );
 
     return (
-        <div className="h-full flex flex-col bg-[#08080c]">
+        <div className="h-full flex flex-col bg-gray-50 dark:bg-[#08080c]">
             {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-white/5 bg-[#16161c] z-20">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-white/5 bg-white dark:bg-[#16161c] z-20">
                 <div className="flex items-center gap-4 flex-1">
-                    <button onClick={() => navigate('/app/workflows')} className="p-2 text-gray-500 hover:text-white transition-colors">
+                    <button onClick={() => navigate('/app/workflows')} className="p-2 text-gray-500 hover:text-gray-900 dark:hover:text-white transition-colors">
                         <Icons.ChevronLeft className="w-6 h-6" />
                     </button>
                     <div className="bg-violet-500/20 p-2 rounded-xl">
@@ -785,37 +897,37 @@ export function WorkflowEditor() {
                             value={name}
                             onChange={(e) => { setName(e.target.value); setError(""); }}
                             placeholder="Workflow Name (e.g. Customer Support)"
-                            className="bg-transparent text-white font-bold w-full focus:outline-none placeholder:text-gray-600 text-lg"
+                            className="bg-transparent text-gray-900 dark:text-white font-bold w-full focus:outline-none placeholder:text-gray-400 dark:placeholder:text-gray-600 text-lg"
                         />
                     </div>
                 </div>
                 <div className="flex items-center gap-3">
-                    <div className="flex items-center bg-white/5 border border-white/10 rounded-xl p-1">
+                    <div className="flex items-center bg-gray-100 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl p-1">
                         <button
                             type="button"
                             onClick={() => setActivePanel('builder')}
-                            className={`px-3 py-2 rounded-lg text-xs font-bold transition-all ${activePanel === 'builder' ? 'bg-violet-600 text-white' : 'text-gray-300 hover:bg-white/10'}`}
+                            className={`px-3 py-2 rounded-lg text-xs font-bold transition-all ${activePanel === 'builder' ? 'bg-violet-600 text-white' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-white/10'}`}
                         >
                             Builder
                         </button>
                         <button
                             type="button"
                             onClick={() => setActivePanel('preview')}
-                            className={`px-3 py-2 rounded-lg text-xs font-bold transition-all ${activePanel === 'preview' ? 'bg-violet-600 text-white' : 'text-gray-300 hover:bg-white/10'}`}
+                            className={`px-3 py-2 rounded-lg text-xs font-bold transition-all ${activePanel === 'preview' ? 'bg-violet-600 text-white' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-white/10'}`}
                         >
                             Preview
                         </button>
                         <button
                             type="button"
                             onClick={() => setActivePanel('simulate')}
-                            className={`px-3 py-2 rounded-lg text-xs font-bold transition-all ${activePanel === 'simulate' ? 'bg-violet-600 text-white' : 'text-gray-300 hover:bg-white/10'}`}
+                            className={`px-3 py-2 rounded-lg text-xs font-bold transition-all ${activePanel === 'simulate' ? 'bg-violet-600 text-white' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-white/10'}`}
                         >
                             Simulate
                         </button>
                     </div>
                     <button
                         onClick={() => navigate('/app/workflows')}
-                        className="px-6 py-2.5 text-gray-400 hover:text-white font-bold transition-all"
+                        className="px-6 py-2.5 text-gray-400 hover:text-gray-900 dark:hover:text-white font-bold transition-all"
                     >
                         Cancel
                     </button>
