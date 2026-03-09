@@ -4,7 +4,7 @@ import {
   Send, Bot, Plus, Search, MoreVertical,
   Smile, ThumbsUp, ThumbsDown, Copy, RefreshCw,
   Sparkles, Clock, Check, Star, Trash2, HelpCircle,
-  ArrowRight, Layout
+  ArrowRight, Layout, Mic, MicOff
 } from "lucide-react";
 import EmojiPicker, { EmojiClickData } from "emoji-picker-react";
 import { supabase } from "../../../lib/supabase";
@@ -179,6 +179,87 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
   const [resolvedRate, setResolvedRate] = useState(0);
   const [chatbot, setChatbot] = useState<any>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const recognitionRef = useRef<any>(null);
+  // Stores the committed text (text before voice started + finalized speech words)
+  const committedTextRef = useRef<string>("");
+  // When true, onend should NOT restore text (e.g. after Send is clicked)
+  const suppressRestoreRef = useRef<boolean>(false);
+
+  const handleVoiceToggle = () => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert("Voice input is not supported in your browser. Please use Chrome or Edge.");
+      return;
+    }
+
+    if (isRecording) {
+      recognitionRef.current?.stop();
+      return;
+    }
+
+    // Snapshot whatever is already typed so we can append to it
+    committedTextRef.current = inputValue;
+
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;       // keep listening until user stops
+    recognition.interimResults = true;   // stream partial results in real time
+    recognition.lang = "en-US";
+
+    recognition.onstart = () => setIsRecording(true);
+
+    recognition.onresult = (event: any) => {
+      let finalSegment = "";
+      let interimSegment = "";
+
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const result = event.results[i];
+        if (result.isFinal) {
+          finalSegment += result[0].transcript;
+        } else {
+          interimSegment += result[0].transcript;
+        }
+      }
+
+      // Commit finalized words into the ref so they survive the next event
+      if (finalSegment) {
+        committedTextRef.current = committedTextRef.current
+          ? committedTextRef.current + " " + finalSegment.trim()
+          : finalSegment.trim();
+      }
+
+      // Always show committed + current interim in the textarea
+      const displayed = interimSegment
+        ? committedTextRef.current
+          ? committedTextRef.current + " " + interimSegment
+          : interimSegment
+        : committedTextRef.current;
+
+      setInputValue(displayed);
+    };
+
+    recognition.onerror = (event: any) => {
+      if (event.error === "not-allowed" || event.error === "permission-denied") {
+        alert("Microphone access denied. Please allow microphone permissions in your browser.");
+      } else if (event.error !== "no-speech" && event.error !== "aborted") {
+        alert("Voice input error: " + event.error);
+      }
+      setIsRecording(false);
+    };
+
+    recognition.onend = () => {
+      setIsRecording(false);
+      if (!suppressRestoreRef.current) {
+        // Keep the final committed text in the box
+        setInputValue(committedTextRef.current);
+        textareaRef.current?.focus();
+      }
+      suppressRestoreRef.current = false;
+    };
+
+    recognitionRef.current = recognition;
+    recognition.start();
+  };
 
   // Get display name for addressing the user
   const displayUserName = userName || user?.user_metadata?.full_name || '';
@@ -479,6 +560,50 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
     return null;
   };
 
+  const handleRefreshChat = async () => {
+    if (!activeConvId || !user) return;
+
+    // Delete all messages in the current conversation
+    await supabase.from('messages').delete().eq('conversation_id', activeConvId);
+
+    // Reset workflow state
+    setActiveWorkflow(null);
+    setCurrentStepId(null);
+    setMessages([]);
+
+    // Re-insert the greeting message
+    const greetingName = (displayUserName && displayUserName.trim())
+      ? displayUserName.trim().split(' ')[0]
+      : "there";
+
+    const welcomeWf = workflows.find(w => w.name.toLowerCase() === 'welcome');
+    let initialContent = `Hello ${greetingName}, what can I do for you?`;
+
+    if (welcomeWf && welcomeWf.nodes.length > 0) {
+      const triggerNode = welcomeWf.nodes.find(n => n.type === 'trigger') || welcomeWf.nodes[0];
+      initialContent = `**Hello ${greetingName}!**\n${triggerNode.message}`;
+      setActiveWorkflow(welcomeWf);
+      setCurrentStepId(triggerNode.id);
+    }
+
+    const welcomeMsg: any = {
+      conversation_id: activeConvId,
+      role: "assistant",
+      content: initialContent,
+    };
+
+    await supabase.from('messages').insert([welcomeMsg]);
+    await fetchMessages(activeConvId);
+
+    // Reset conversation preview
+    await supabase.from('conversations').update({
+      preview: "No messages yet",
+      updated_at: new Date().toISOString(),
+    }).eq('id', activeConvId);
+
+    fetchConversations();
+  };
+
   const handleDeleteChat = async (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     if (!window.confirm("Are you sure you want to delete this conversation?")) return;
@@ -538,6 +663,12 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
     };
 
     setInputValue("");
+    committedTextRef.current = "";
+    // Stop voice recognition if active so it doesn't overwrite the cleared box
+    if (recognitionRef.current && isRecording) {
+      suppressRestoreRef.current = true;
+      recognitionRef.current.stop();
+    }
     const { data: savedUserMsg, error } = await supabase.from('messages').insert([userMsg]).select().single();
     if (error) {
       console.error("Error sending message:", error.message);
@@ -812,7 +943,7 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
             )}
             <button
               type="button"
-              onClick={handleCreateChat}
+              onClick={handleRefreshChat}
               className="px-3 py-1.5 bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 border border-gray-300 dark:border-white/8 rounded-lg text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white flex items-center gap-1.5 transition-all"
               style={{ fontSize: "0.75rem" }}
             >
@@ -1028,6 +1159,14 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
                 style={{ fontSize: "0.875rem", lineHeight: 1.5, minHeight: "24px", maxHeight: "120px" }}
               />
               <div className="flex items-center gap-2 mb-0.5">
+                <button
+                  type="button"
+                  onClick={handleVoiceToggle}
+                  title={isRecording ? "Stop recording" : "Voice input"}
+                  className={`transition-colors ${isRecording ? 'text-red-400 animate-pulse' : 'text-gray-600 dark:text-gray-600 hover:text-violet-400 dark:hover:text-violet-400'}`}
+                >
+                  {isRecording ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+                </button>
                 <button
                   type="button"
                   onClick={() => setShowEmojiPicker(prev => !prev)}
