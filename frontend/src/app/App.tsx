@@ -13,6 +13,7 @@ import { ChatbotManagePage } from "./components/chat/ChatbotManagePage";
 import { EmbeddedChatPage } from "./components/chat/EmbeddedChatPage";
 import { ProfilePage } from "./components/profile/ProfilePage";
 import { SettingsPage } from "./components/settings/SettingsPage";
+import { KnowledgeBasePage } from "./components/knowledge/KnowledgeBasePage";
 
 const router = createBrowserRouter([
   {
@@ -40,6 +41,7 @@ const router = createBrowserRouter([
       { path: "faq", Component: FAQManager },
       { path: "faq/:id", Component: FAQEditor },
       { path: "analytics", Component: AnalyticsPage },
+      { path: "knowledge", Component: KnowledgeBasePage },
       { path: "profile", Component: ProfilePage },
       { path: "settings", Component: SettingsPage },
     ],

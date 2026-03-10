@@ -17,6 +17,7 @@ import {
   Sun,
   User,
   ChevronDown,
+  BookOpen,
 } from "lucide-react";
 import { supabase } from "../../../lib/supabase";
 
@@ -26,12 +27,47 @@ const navItems = [
   { path: "/app/faq", icon: HelpCircle, label: "FAQ Manager" },
 ];
 
+// Knowledge Base nav item
+const KnowledgeBaseNavItem = ({ collapsed, chatbotId }: { collapsed: boolean; chatbotId: string | null }) => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const isActive = location.pathname === '/app/knowledge';
+
+  return (
+    <button
+      type="button"
+      onClick={() => navigate('/app/knowledge')}
+      title="Knowledge Base"
+      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all ${
+        isActive
+          ? 'bg-violet-500/15 text-violet-400 border border-violet-500/20'
+          : 'text-gray-500 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-200 dark:hover:bg-white/5'
+      } ${collapsed ? 'justify-center' : ''}`}
+    >
+      <BookOpen className={`w-[18px] h-[18px] flex-shrink-0 ${isActive ? 'text-violet-400' : ''}`} />
+      {!collapsed && (
+        <span style={{ fontSize: '0.875rem', fontWeight: isActive ? 600 : 400 }}>Knowledge Base</span>
+      )}
+      {!collapsed && isActive && (
+        <div className="ml-auto w-1.5 h-1.5 bg-violet-400 rounded-full" />
+      )}
+    </button>
+  );
+};
+
 export function Layout() {
   const [collapsed, setCollapsed] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [notifications, setNotifications] = useState([
+    { id: 1, title: "New conversation started", desc: "A user started a new chat session.", time: "2m ago", read: false },
+    { id: 2, title: "FAQ updated", desc: "Your FAQ entry was saved successfully.", time: "1h ago", read: false },
+    { id: 3, title: "Workflow triggered", desc: "Workflow \"Welcome Flow\" ran successfully.", time: "3h ago", read: true },
+  ]);
   const userMenuRef = useRef<HTMLDivElement>(null);
+  const notifRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const location = useLocation();
   const activeChatbotId = localStorage.getItem("activeChatbotId");
@@ -57,13 +93,16 @@ export function Layout() {
       if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
         setShowUserMenu(false);
       }
+      if (notifRef.current && !notifRef.current.contains(event.target as Node)) {
+        setShowNotifications(false);
+      }
     };
 
-    if (showUserMenu) {
+    if (showUserMenu || showNotifications) {
       document.addEventListener('mousedown', handleClickOutside);
       return () => document.removeEventListener('mousedown', handleClickOutside);
     }
-  }, [showUserMenu]);
+  }, [showUserMenu, showNotifications]);
 
   const applyTheme = (isDark: boolean) => {
     const html = document.documentElement;
@@ -200,6 +239,9 @@ export function Layout() {
             </NavLink>
           ))}
 
+          {/* Knowledge Base — chatbot-scoped */}
+          <KnowledgeBaseNavItem collapsed={collapsed} chatbotId={activeChatbotId} />
+
           {!collapsed && (
             <p className="text-gray-600 dark:text-gray-600 px-3 mb-2 mt-5" style={{ fontSize: "0.65rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em" }}>
               Analytics
@@ -281,10 +323,59 @@ export function Layout() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button type="button" className="relative w-8 h-8 flex items-center justify-center text-gray-600 dark:text-gray-500 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-white/5 rounded-lg transition-all">
-              <Bell className="w-4 h-4" />
-              <span className="absolute top-1 right-1 w-2 h-2 bg-violet-500 rounded-full" />
-            </button>
+            <div className="relative" ref={notifRef}>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowNotifications(!showNotifications);
+                  setShowUserMenu(false);
+                }}
+                className="relative w-8 h-8 flex items-center justify-center text-gray-600 dark:text-gray-500 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-white/5 rounded-lg transition-all"
+              >
+                <Bell className="w-4 h-4" />
+                {notifications.some(n => !n.read) && (
+                  <span className="absolute top-1 right-1 w-2 h-2 bg-violet-500 rounded-full" />
+                )}
+              </button>
+
+              {showNotifications && (
+                <div className="absolute right-0 mt-2 w-80 bg-white dark:bg-[#16161e] border border-gray-300 dark:border-white/10 rounded-xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-white/8">
+                    <span className="text-black dark:text-white text-sm font-semibold">Notifications</span>
+                    <button
+                      type="button"
+                      onClick={() => setNotifications(prev => prev.map(n => ({ ...n, read: true })))}
+                      className="text-xs text-violet-500 hover:text-violet-400 transition-colors"
+                    >
+                      Mark all read
+                    </button>
+                  </div>
+                  <div className="max-h-72 overflow-y-auto">
+                    {notifications.length === 0 ? (
+                      <p className="text-center text-gray-500 text-sm py-6">No notifications</p>
+                    ) : (
+                      notifications.map(n => (
+                        <button
+                          key={n.id}
+                          type="button"
+                          onClick={() => setNotifications(prev => prev.map(x => x.id === n.id ? { ...x, read: true } : x))}
+                          className={`w-full text-left flex items-start gap-3 px-4 py-3 hover:bg-gray-100 dark:hover:bg-white/5 transition-all border-b border-gray-100 dark:border-white/5 last:border-0 ${
+                            !n.read ? 'bg-violet-50 dark:bg-violet-500/5' : ''
+                          }`}
+                        >
+                          <span className={`mt-1.5 w-2 h-2 rounded-full flex-shrink-0 ${!n.read ? 'bg-violet-500' : 'bg-transparent'}`} />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-black dark:text-white text-sm font-medium">{n.title}</p>
+                            <p className="text-gray-500 dark:text-gray-400 text-xs mt-0.5 truncate">{n.desc}</p>
+                          </div>
+                          <span className="text-gray-400 dark:text-gray-600 text-xs flex-shrink-0">{n.time}</span>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
             <button
               type="button"
               onClick={handleDarkModeToggle}

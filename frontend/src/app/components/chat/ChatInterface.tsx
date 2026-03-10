@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect } from "react";
 import * as Icons from "lucide-react";
 import {
-  Send, Bot, Plus, Search, MoreVertical,
+  Send, Bot, Plus, Search,
   Smile, ThumbsUp, ThumbsDown, Copy, RefreshCw,
   Sparkles, Clock, Check, Star, Trash2, HelpCircle,
-  ArrowRight, Layout, Mic, MicOff
+  ArrowRight, Layout, Mic, MicOff, Paperclip, FileText
 } from "lucide-react";
 import EmojiPicker, { EmojiClickData } from "emoji-picker-react";
 import { supabase } from "../../../lib/supabase";
@@ -185,6 +185,49 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
   const committedTextRef = useRef<string>("");
   // When true, onend should NOT restore text (e.g. after Send is clicked)
   const suppressRestoreRef = useRef<boolean>(false);
+  // PDF upload state
+  const [pdfStatus, setPdfStatus] = useState<'idle' | 'uploading' | 'done' | 'error'>('idle');
+  const [pdfStatusMsg, setPdfStatusMsg] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+
+  const handlePDFUpload = async (file: File) => {
+    if (!activeChatbotId) return;
+    if (file.size > 5 * 1024 * 1024) {
+      setPdfStatus('error');
+      setPdfStatusMsg('File exceeds 5 MB limit.');
+      setTimeout(() => setPdfStatus('idle'), 4000);
+      return;
+    }
+
+    setPdfStatus('uploading');
+    setPdfStatusMsg(`Uploading "${file.name}"…`);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('chatbotId', activeChatbotId);
+      formData.append('sessionOnly', embedded ? 'true' : 'false');
+      if (embedded && activeConvId) formData.append('conversationId', activeConvId);
+
+      const res = await fetch(`${backendUrl}/api/knowledge/upload`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Upload failed');
+
+      setPdfStatus('done');
+      setPdfStatusMsg(`"${data.title}" indexed (${data.chunkCount} chunks)`);
+    } catch (err: any) {
+      setPdfStatus('error');
+      setPdfStatusMsg(err.message || 'Upload failed.');
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      setTimeout(() => setPdfStatus('idle'), 5000);
+    }
+  };
 
   const handleVoiceToggle = () => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -708,8 +751,10 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
                 name: chatbot?.name || 'AI Assistant',
                 description: chatbot?.description || 'A helpful chatbot'
               },
-              userName: displayUserName, // Pass user name for personalization
-              conversationHistory: messages.slice(-5) // Last 5 messages for context
+              userName: displayUserName,
+              conversationHistory: messages.slice(-5),
+              chatbotId: activeChatbotId,
+              conversationId: currentConvId
             })
           });
 
@@ -959,11 +1004,7 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
                 <Trash2 className="w-4 h-4" />
               </button>
             )}
-            {!embedded && (
-              <button type="button" className="w-8 h-8 flex items-center justify-center text-gray-600 dark:text-gray-500 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg transition-all">
-                <MoreVertical className="w-4 h-4" />
-              </button>
-            )}
+
           </div>
         </div>
 
@@ -1142,6 +1183,30 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
                 />
               </div>
             )}
+            {/* PDF status indicator */}
+            {pdfStatus !== 'idle' && (
+              <div className={`mb-2 flex items-center gap-2 text-xs px-3 py-1.5 rounded-lg w-fit ${
+                pdfStatus === 'uploading' ? 'bg-violet-500/10 text-violet-300'
+                : pdfStatus === 'done' ? 'bg-green-500/10 text-green-400'
+                : 'bg-red-500/10 text-red-400'
+              }`}>
+                <FileText className="w-3.5 h-3.5 flex-shrink-0" />
+                {pdfStatusMsg}
+              </div>
+            )}
+
+            {/* Hidden file input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) handlePDFUpload(file);
+              }}
+            />
+
             <div className="flex items-end gap-3 bg-gray-100 dark:bg-white/5 border border-gray-300 dark:border-white/10 rounded-2xl px-4 py-3 focus-within:border-violet-500/40 transition-colors">
               <textarea
                 value={inputValue}
@@ -1159,6 +1224,15 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
                 style={{ fontSize: "0.875rem", lineHeight: 1.5, minHeight: "24px", maxHeight: "120px" }}
               />
               <div className="flex items-center gap-2 mb-0.5">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  title="Upload PDF to knowledge base"
+                  disabled={pdfStatus === 'uploading'}
+                  className="text-gray-600 dark:text-gray-600 hover:text-violet-400 dark:hover:text-violet-400 transition-colors disabled:opacity-40"
+                >
+                  <Paperclip className="w-4 h-4" />
+                </button>
                 <button
                   type="button"
                   onClick={handleVoiceToggle}
