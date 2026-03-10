@@ -58,23 +58,99 @@ async function embedText(text: string): Promise<number[]> {
 getEmbeddingPipeline().catch(() => {});
 
 // ── Text chunker ─────────────────────────────────────────────────────────────
-function chunkText(text: string, chunkSize = 800, overlap = 150): string[] {
-  const paragraphs = text.split(/\n\s*\n/).filter(p => p.trim().length > 20);
+// Handles plain prose, numbered/headed sections, and table-like rows.
+// Section headings are prepended to each chunk so retrieval preserves context.
+function chunkText(text: string, chunkSize = 400, overlap = 80): string[] {
+  const lines = text.split('\n');
+  const segments: string[] = [];
+  let currentSection = '';
+  let pendingLines: string[] = [];
+  let pendingIsTable = false;
+
+  // A heading: short, no trailing punctuation, or starts with a known keyword
+  const isHeading = (t: string) =>
+    t.length > 0 && t.length < 80 &&
+    !t.endsWith('.') && !t.endsWith(',') && !t.endsWith(':') &&
+    (/^(DAY|WEEK|PHASE|SECTION|CHAPTER|PART|MODULE|STEP|STAGE)\b/i.test(t) ||
+     (t === t.toUpperCase() && /[A-Z]/.test(t)));
+
+  // A table row: line with 3+ consecutive spaces (column alignment)
+  const isTableRow = (raw: string) =>
+    /\s{3,}/.test(raw) && raw.trim().length > 10;
+
+  const flush = (fLines: string[], isTable: boolean) => {
+    if (!fLines.length) return;
+    const prefix = currentSection ? `[${currentSection}] ` : '';
+    if (isTable) {
+      // Keep table rows together, break only when chunk would exceed limit
+      let acc = '';
+      for (const row of fLines) {
+        const candidate = acc ? acc + '\n' + row : prefix + row;
+        if (candidate.length <= chunkSize) {
+          acc = candidate;
+        } else {
+          if (acc.trim().length >= 20) segments.push(acc.trim());
+          acc = prefix + row;
+        }
+      }
+      if (acc.trim().length >= 20) segments.push(acc.trim());
+    } else {
+      // Prose: join lines, then split on sentences up to chunkSize
+      const prose = (prefix + fLines.join(' ')).replace(/\s+/g, ' ').trim();
+      if (prose.length <= chunkSize) {
+        if (prose.length >= 20) segments.push(prose);
+      } else {
+        const parts = prose.split(/(?<=[.?!])\s+/);
+        let acc = '';
+        for (const part of parts) {
+          const candidate = acc ? acc + ' ' + part : part;
+          if (candidate.length <= chunkSize) {
+            acc = candidate;
+          } else {
+            if (acc.trim().length >= 20) segments.push(acc.trim());
+            acc = part;
+          }
+        }
+        if (acc.trim().length >= 20) segments.push(acc.trim());
+      }
+    }
+  };
+
+  for (const rawLine of lines) {
+    const trimmed = rawLine.trim();
+    if (!trimmed) {
+      flush(pendingLines, pendingIsTable);
+      pendingLines = []; pendingIsTable = false;
+      continue;
+    }
+    if (isHeading(trimmed)) {
+      flush(pendingLines, pendingIsTable);
+      pendingLines = []; pendingIsTable = false;
+      currentSection = trimmed;
+      continue;
+    }
+    const tableRow = isTableRow(rawLine);
+    if (pendingLines.length > 0 && tableRow !== pendingIsTable) {
+      flush(pendingLines, pendingIsTable);
+      pendingLines = [];
+    }
+    pendingIsTable = tableRow;
+    pendingLines.push(trimmed);
+  }
+  flush(pendingLines, pendingIsTable);
+
+  // Merge small segments and add overlap between consecutive chunks
   const chunks: string[] = [];
   let current = '';
-
-  for (const para of paragraphs) {
-    const cleaned = para.replace(/\s+/g, ' ').trim();
-    if (!cleaned) continue;
-
+  for (const seg of segments) {
     if (!current) {
-      current = cleaned;
-    } else if ((current + '\n\n' + cleaned).length <= chunkSize) {
-      current += '\n\n' + cleaned;
+      current = seg;
+    } else if ((current + ' ' + seg).length <= chunkSize) {
+      current += ' ' + seg;
     } else {
-      chunks.push(current.trim());
-      const overlapText = current.length > overlap ? current.slice(-overlap) : current;
-      current = overlapText + '\n\n' + cleaned;
+      if (current.length >= 20) chunks.push(current.trim());
+      const tail = current.length > overlap ? current.slice(-overlap) : current;
+      current = tail + ' ' + seg;
     }
   }
   if (current.trim().length >= 20) chunks.push(current.trim());
@@ -176,25 +252,80 @@ app.post('/api/chat', rateLimitMiddleware, async (req: Request, res: Response) =
     }
 
     // ── RAG: retrieve relevant knowledge base chunks ─────────────────────────
+    let ragContextFound = false;
     if (chatbotId && supabaseAdmin) {
       try {
         const queryEmbedding = await embedText(message);
+        const embeddingStr = `[${queryEmbedding.join(',')}]`;
         const { data: chunks, error: rpcError } = await supabaseAdmin.rpc('match_document_chunks', {
-          query_embedding: queryEmbedding,
+          query_embedding: embeddingStr,
           match_chatbot_id: chatbotId,
           match_conversation_id: conversationId || null,
-          match_count: 5,
-          match_threshold: 0.3
+          match_count: 12,
+          match_threshold: 0.1
         });
 
         if (rpcError) {
           console.warn('RAG RPC error:', rpcError.message);
         } else if (chunks && chunks.length > 0) {
-          console.log(`RAG: ${chunks.length} chunks retrieved for chatbot ${chatbotId}`);
-          const ragContext = (chunks as any[]).map((c: any) => c.content).join('\n\n---\n\n');
-          systemPrompt += `\n\n### Knowledge Base Context\nUse the following information to answer the user's question accurately. If it is not relevant, rely on your general knowledge.\n\n${ragContext}\n---`;
+          ragContextFound = true;
+
+          // ── Adjacent chunk expansion ──────────────────────────────────────
+          // For each retrieved chunk, also fetch its neighbours (±2 indexes)
+          // from the same source so we never get half a section.
+          const matchedChunks = chunks as any[];
+          const seen = new Set<string>(matchedChunks.map((c: any) => c.id));
+          const expandedChunks: any[] = [...matchedChunks];
+
+          // Group matched chunks by source_id
+          const sourceMap = new Map<string, number[]>();
+          for (const c of matchedChunks) {
+            if (!c.source_id) continue;
+            if (!sourceMap.has(c.source_id)) sourceMap.set(c.source_id, []);
+            sourceMap.get(c.source_id)!.push(c.chunk_index);
+          }
+
+          for (const [sourceId, indexes] of sourceMap.entries()) {
+            const minIdx = Math.max(0, Math.min(...indexes) - 2);
+            const maxIdx = Math.max(...indexes) + 2;
+            const { data: neighbours } = await supabaseAdmin
+              .from('document_chunks')
+              .select('id, content, chunk_index, source_id')
+              .eq('chatbot_id', chatbotId)
+              .eq('source_id', sourceId)
+              .gte('chunk_index', minIdx)
+              .lte('chunk_index', maxIdx)
+              .order('chunk_index', { ascending: true });
+            if (neighbours) {
+              for (const n of neighbours) {
+                if (!seen.has(n.id)) {
+                  seen.add(n.id);
+                  expandedChunks.push(n);
+                }
+              }
+            }
+          }
+
+          // Sort all chunks by source + chunk_index so context reads naturally
+          expandedChunks.sort((a, b) =>
+            (a.source_id || '').localeCompare(b.source_id || '') ||
+            (a.chunk_index ?? 0) - (b.chunk_index ?? 0)
+          );
+
+          console.log(`RAG: ${matchedChunks.length} matched + ${expandedChunks.length - matchedChunks.length} neighbours = ${expandedChunks.length} total chunks`);
+          const ragContext = expandedChunks.map((c: any) => c.content).join('\n\n---\n\n');
+          systemPrompt += `\n\n### Knowledge Base Context\nUse the information below to answer the user's question accurately. Base your answer on this context. You may apply simple common-sense reasoning to bridge terminology in the context to the user's question (e.g. numbered items map to natural names, abbreviations have standard meanings). Do not invent facts not supported by the context. If the answer cannot be determined even with reasonable inference, say so clearly.\n\n${ragContext}\n---`;
         } else {
-          console.log(`RAG: no chunks matched for chatbot ${chatbotId} (threshold 0.3)`);
+          // Log top scores even when nothing passes threshold to help diagnose
+          const { data: topChunks } = await supabaseAdmin.rpc('match_document_chunks', {
+            query_embedding: embeddingStr,
+            match_chatbot_id: chatbotId,
+            match_conversation_id: null,
+            match_count: 3,
+            match_threshold: 0.0
+          });
+          const scores = topChunks ? (topChunks as any[]).map((c: any) => c.similarity?.toFixed(3)).join(', ') : 'none';
+          console.log(`RAG: no chunks passed threshold 0.35 for chatbot ${chatbotId}. Top scores: [${scores}]`);
         }
       } catch (ragErr) {
         console.warn('RAG retrieval skipped:', (ragErr as any)?.message);
@@ -238,7 +369,7 @@ app.post('/api/chat', rateLimitMiddleware, async (req: Request, res: Response) =
     const completion = await groq.chat.completions.create({
       messages,
       model: 'llama-3.3-70b-versatile', // Fast and capable model
-      temperature: 0.7,
+      temperature: ragContextFound ? 0.1 : 0.7,
       max_tokens: 1024,
       top_p: 1,
       stream: false
@@ -385,6 +516,53 @@ app.delete('/api/knowledge/source/:sourceId', async (req: Request, res: Response
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ── RAG debug endpoint ──────────────────────────────────────────────────────
+app.get('/api/debug/rag/:chatbotId', async (req: Request, res: Response) => {
+  if (!supabaseAdmin) {
+    return res.json({ ok: false, error: 'supabaseAdmin is null — check SUPABASE_URL and SUPABASE_SERVICE_KEY env vars' });
+  }
+  const { chatbotId } = req.params;
+  try {
+    // Count total chunks
+    const { count, error: countError } = await supabaseAdmin
+      .from('document_chunks')
+      .select('*', { count: 'exact', head: true })
+      .eq('chatbot_id', chatbotId);
+
+    // Get a sample chunk to verify embedding format
+    const { data: sample } = await supabaseAdmin
+      .from('document_chunks')
+      .select('id, chunk_index, content, embedding')
+      .eq('chatbot_id', chatbotId)
+      .limit(1)
+      .single();
+
+    // Run a test similarity search with threshold 0
+    const testQuery = 'test';
+    const testEmbedding = await embedText(testQuery);
+    const testEmbeddingStr = `[${testEmbedding.join(',')}]`;
+    const { data: topMatches, error: rpcError } = await supabaseAdmin.rpc('match_document_chunks', {
+      query_embedding: testEmbeddingStr,
+      match_chatbot_id: chatbotId,
+      match_conversation_id: null,
+      match_count: 5,
+      match_threshold: 0.0
+    });
+
+    res.json({
+      ok: true,
+      chatbotId,
+      totalChunks: count ?? 0,
+      countError: countError?.message ?? null,
+      sampleChunk: sample ? { id: sample.id, content: sample.content.slice(0, 100), hasEmbedding: !!sample.embedding } : null,
+      topMatchScores: topMatches ? (topMatches as any[]).map((c: any) => ({ score: c.similarity, preview: c.content.slice(0, 60) })) : [],
+      rpcError: rpcError?.message ?? null
+    });
+  } catch (err: any) {
+    res.status(500).json({ ok: false, error: err.message });
   }
 });
 
