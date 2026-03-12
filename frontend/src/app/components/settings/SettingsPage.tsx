@@ -23,9 +23,17 @@ export function SettingsPage() {
     const fetch = async () => {
       try {
         setLoadingBots(true);
+        const { data: userData } = await supabase.auth.getUser();
+        const currentUser = userData.user;
+        if (!currentUser) {
+          navigate("/auth");
+          return;
+        }
+
         const { data, error } = await supabase
           .from("chatbots")
           .select("id,name")
+          .eq("user_id", currentUser.id)
           .order("created_at", { ascending: false });
         if (error) throw error;
         setChatbots(data || []);
@@ -36,7 +44,7 @@ export function SettingsPage() {
       }
     };
     fetch();
-  }, []);
+  }, [navigate]);
 
   const applyTheme = (dark: boolean) => {
     const html = document.documentElement;

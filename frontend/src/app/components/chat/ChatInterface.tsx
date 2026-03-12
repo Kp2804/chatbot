@@ -333,7 +333,7 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
           if (!embedded) navigate('/app');
           return;
         }
-        fetchChatbot();
+        fetchChatbot(user.id);
         fetchConversations();
         fetchFAQs();
         fetchWorkflows();
@@ -348,8 +348,8 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
   }, [activeChatbotId]);
 
   useEffect(() => {
-    if (activeChatbotId) {
-      fetchChatbot();
+    if (activeChatbotId && user) {
+      fetchChatbot(user.id);
       fetchConversations();
       fetchFAQs();
       fetchWorkflows();
@@ -358,7 +358,7 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
       setActiveWorkflow(null);
       setCurrentStepId(null);
     }
-  }, [activeChatbotId]);
+  }, [activeChatbotId, user]);
 
   useEffect(() => {
     if (activeConvId) fetchMessages(activeConvId);
@@ -492,14 +492,22 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
     }
   };
 
-  const fetchChatbot = async () => {
+  const fetchChatbot = async (userId: string) => {
     if (!activeChatbotId) return;
     const { data, error } = await supabase
       .from('chatbots')
       .select('id, name, description')
       .eq('id', activeChatbotId)
+      .eq('user_id', userId)
       .single();
-    if (!error && data) setChatbot(data);
+
+    if (error || !data) {
+      console.error("Chatbot not found or not owned by current user.");
+      navigate('/app');
+      return;
+    }
+
+    setChatbot(data);
   };
 
   const fetchMessages = async (convId: string) => {

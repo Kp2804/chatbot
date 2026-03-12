@@ -68,16 +68,25 @@ export function ChatbotManagePage() {
   const fetchChatbot = async (id: string) => {
     try {
       setLoading(true);
+      const { data: userData } = await supabase.auth.getUser();
+      const currentUser = userData.user;
+      if (!currentUser) {
+        navigate("/auth");
+        return;
+      }
+
       const { data, error } = await supabase
         .from("chatbots")
         .select("*")
         .eq("id", id)
+        .eq("user_id", currentUser.id)
         .single();
 
       if (error) throw error;
       setChatbot(data as Chatbot);
     } catch (error: any) {
       console.error("Failed loading chatbot:", error.message);
+      navigate("/app");
     } finally {
       setLoading(false);
     }
@@ -153,13 +162,21 @@ export function ChatbotManagePage() {
 
     try {
       setSaving(true);
+      const { data: userData } = await supabase.auth.getUser();
+      const currentUser = userData.user;
+      if (!currentUser) {
+        navigate("/auth");
+        return;
+      }
+
       const { error } = await supabase
         .from("chatbots")
         .update({
           name: chatbot.name.trim(),
           updated_at: new Date().toISOString(),
         })
-        .eq("id", chatbotId);
+        .eq("id", chatbotId)
+        .eq("user_id", currentUser.id);
 
       if (error) throw error;
       await fetchChatbot(chatbotId);

@@ -37,6 +37,7 @@ export function ChatbotSelectionPage() {
       const { data, error } = await supabase
         .from("chatbots")
         .select("*")
+        .eq("user_id", currentUser.id)
         .order("created_at", { ascending: true });
 
       if (error) throw error;
