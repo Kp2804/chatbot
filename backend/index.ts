@@ -538,7 +538,7 @@ app.get('/api/knowledge/:chatbotId', async (req: Request, res: Response) => {
 
     const user = await requireAuth(req, res);
     if (!user) return;
-    const owns = await requireChatbotOwner(user.id, chatbotId, res);
+    const owns = await requireChatbotOwner(user.id, String(chatbotId), res);
     if (!owns) return;
 
     const { data, error } = await supabaseAdmin
