@@ -7,7 +7,7 @@ import {
   ArrowRight, Layout, Mic, MicOff, Paperclip, FileText
 } from "lucide-react";
 import EmojiPicker, { EmojiClickData } from "emoji-picker-react";
-import { supabase } from "../../../lib/supabase";
+import { supabase, getAccessToken } from "../../../lib/supabase";
 import { useNavigate, useParams } from "react-router";
 
 interface Message {
@@ -207,11 +207,14 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
       const formData = new FormData();
       formData.append('file', file);
       formData.append('chatbotId', activeChatbotId);
-      formData.append('sessionOnly', embedded ? 'true' : 'false');
+      const isSessionOnly = embedded ? 'true' : 'false';
+      formData.append('sessionOnly', isSessionOnly);
       if (embedded && activeConvId) formData.append('conversationId', activeConvId);
 
+      const token = !embedded ? await getAccessToken() : null;
       const res = await fetch(`${backendUrl}/api/knowledge/upload`, {
         method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: formData,
       });
 

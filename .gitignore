@@ -1,5 +1,10 @@
 node_modules
 
+# Environment variables — never commit real secrets
+.env
+.env.local
+.env.*.local
+
 # macOS metadata
 .DS_Store
 

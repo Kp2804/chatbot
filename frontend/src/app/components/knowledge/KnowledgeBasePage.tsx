@@ -4,7 +4,7 @@ import {
   BookOpen, FileText, Trash2, Upload, Loader2,
   CheckCircle, AlertCircle, Bot
 } from "lucide-react";
-import { supabase } from "../../../lib/supabase";
+import { supabase, getAccessToken } from "../../../lib/supabase";
 
 interface KBSource {
   id: string;
@@ -70,7 +70,10 @@ export function KnowledgeBasePage() {
   const fetchSources = async (chatbotId: string) => {
     setLoadingSources(true);
     try {
-      const res = await fetch(`${backendUrl}/api/knowledge/${chatbotId}`);
+      const token = await getAccessToken();
+      const res = await fetch(`${backendUrl}/api/knowledge/${chatbotId}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
       if (res.ok) setSources(await res.json());
     } catch {
       // silent
@@ -97,8 +100,10 @@ export function KnowledgeBasePage() {
       formData.append("chatbotId", selectedChatbotId);
       formData.append("sessionOnly", "false");
 
+      const token = await getAccessToken();
       const res = await fetch(`${backendUrl}/api/knowledge/upload`, {
         method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: formData,
       });
       const data = await res.json();
@@ -119,7 +124,11 @@ export function KnowledgeBasePage() {
   const handleDelete = async (sourceId: string) => {
     if (!window.confirm("Delete this document and all its indexed chunks?")) return;
     try {
-      const res = await fetch(`${backendUrl}/api/knowledge/source/${sourceId}`, { method: "DELETE" });
+      const token = await getAccessToken();
+      const res = await fetch(`${backendUrl}/api/knowledge/source/${sourceId}`, {
+        method: "DELETE",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
       if (!res.ok) throw new Error("Delete failed");
       setSources((prev) => prev.filter((s) => s.id !== sourceId));
     } catch (err: any) {

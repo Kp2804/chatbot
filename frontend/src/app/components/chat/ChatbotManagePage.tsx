@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useNavigate, useParams } from "react-router";
 import { Bot, Save, RefreshCw, Paperclip, Trash2, FileText, CheckCircle, AlertCircle, Loader2, Upload } from "lucide-react";
-import { supabase } from "../../../lib/supabase";
+import { supabase, getAccessToken } from "../../../lib/supabase";
 
 interface Chatbot {
   id: string;
@@ -95,7 +95,10 @@ export function ChatbotManagePage() {
   const fetchKBSources = async (id: string) => {
     try {
       setKbLoading(true);
-      const res = await fetch(`${backendUrl}/api/knowledge/${id}`);
+      const token = await getAccessToken();
+      const res = await fetch(`${backendUrl}/api/knowledge/${id}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
       if (res.ok) {
         const data = await res.json();
         setKbSources(data);
@@ -124,8 +127,10 @@ export function ChatbotManagePage() {
       formData.append('chatbotId', chatbotId);
       formData.append('sessionOnly', 'false');
 
+      const token = await getAccessToken();
       const res = await fetch(`${backendUrl}/api/knowledge/upload`, {
         method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: formData,
       });
 
@@ -149,7 +154,11 @@ export function ChatbotManagePage() {
     if (!window.confirm('Delete this document and all its indexed chunks?')) return;
 
     try {
-      const res = await fetch(`${backendUrl}/api/knowledge/source/${sourceId}`, { method: 'DELETE' });
+      const token = await getAccessToken();
+      const res = await fetch(`${backendUrl}/api/knowledge/source/${sourceId}`, {
+        method: 'DELETE',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
       if (!res.ok) throw new Error('Delete failed');
       setKbSources(prev => prev.filter(s => s.id !== sourceId));
     } catch (err: any) {

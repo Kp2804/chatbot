@@ -393,6 +393,44 @@ app.post('/api/chat', rateLimitMiddleware, async (req: Request, res: Response) =
   }
 });
 
+// ── Auth helpers ─────────────────────────────────────────────────────────────
+
+// Extract and verify the Supabase JWT from the Authorization header.
+// Returns the authenticated user or throws with a 401 response.
+async function requireAuth(req: Request, res: Response): Promise<{ id: string } | null> {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  if (!token) {
+    res.status(401).json({ error: 'Missing Authorization header' });
+    return null;
+  }
+  if (!supabaseAdmin) {
+    res.status(503).json({ error: 'Supabase not configured' });
+    return null;
+  }
+  const { data, error } = await supabaseAdmin.auth.getUser(token);
+  if (error || !data.user) {
+    res.status(401).json({ error: 'Invalid or expired token' });
+    return null;
+  }
+  return data.user as { id: string };
+}
+
+// Verify a user owns a given chatbot. Returns false and sends 403 if not.
+async function requireChatbotOwner(userId: string, chatbotId: string, res: Response): Promise<boolean> {
+  const { data, error } = await supabaseAdmin!
+    .from('chatbots')
+    .select('id')
+    .eq('id', chatbotId)
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (error || !data) {
+    res.status(403).json({ error: 'Forbidden: you do not own this chatbot' });
+    return false;
+  }
+  return true;
+}
+
 // ── Knowledge Base endpoints ─────────────────────────────────────────────────
 
 // Upload a PDF — persistent (chatbot owner) or session-only (widget user)
@@ -409,6 +447,15 @@ app.post('/api/knowledge/upload', upload.single('file'), async (req: Request, re
     if (!chatbotId) return res.status(400).json({ error: 'chatbotId is required' });
 
     const isSessionOnly = sessionOnly === 'true';
+
+    // Persistent uploads require the authenticated chatbot owner.
+    // Session-only uploads (from widget users) are allowed without auth.
+    if (!isSessionOnly) {
+      const user = await requireAuth(req, res);
+      if (!user) return;
+      const owns = await requireChatbotOwner(user.id, chatbotId, res);
+      if (!owns) return;
+    }
 
     // Parse PDF text
     const pdfData = await pdfParse(file.buffer);
@@ -488,6 +535,12 @@ app.get('/api/knowledge/:chatbotId', async (req: Request, res: Response) => {
     if (!supabaseAdmin) return res.status(503).json({ error: 'Supabase not configured' });
 
     const { chatbotId } = req.params;
+
+    const user = await requireAuth(req, res);
+    if (!user) return;
+    const owns = await requireChatbotOwner(user.id, chatbotId, res);
+    if (!owns) return;
+
     const { data, error } = await supabaseAdmin
       .from('chatbot_knowledge_sources')
       .select('*')
@@ -507,6 +560,22 @@ app.delete('/api/knowledge/source/:sourceId', async (req: Request, res: Response
     if (!supabaseAdmin) return res.status(503).json({ error: 'Supabase not configured' });
 
     const { sourceId } = req.params;
+
+    // Verify caller owns the chatbot this source belongs to
+    const user = await requireAuth(req, res);
+    if (!user) return;
+
+    const { data: source, error: fetchError } = await supabaseAdmin
+      .from('chatbot_knowledge_sources')
+      .select('chatbot_id')
+      .eq('id', sourceId)
+      .maybeSingle();
+
+    if (fetchError || !source) return res.status(404).json({ error: 'Source not found' });
+
+    const owns = await requireChatbotOwner(user.id, source.chatbot_id, res);
+    if (!owns) return;
+
     const { error } = await supabaseAdmin
       .from('chatbot_knowledge_sources')
       .delete()
@@ -516,53 +585,6 @@ app.delete('/api/knowledge/source/:sourceId', async (req: Request, res: Response
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
-  }
-});
-
-// ── RAG debug endpoint ──────────────────────────────────────────────────────
-app.get('/api/debug/rag/:chatbotId', async (req: Request, res: Response) => {
-  if (!supabaseAdmin) {
-    return res.json({ ok: false, error: 'supabaseAdmin is null — check SUPABASE_URL and SUPABASE_SERVICE_KEY env vars' });
-  }
-  const { chatbotId } = req.params;
-  try {
-    // Count total chunks
-    const { count, error: countError } = await supabaseAdmin
-      .from('document_chunks')
-      .select('*', { count: 'exact', head: true })
-      .eq('chatbot_id', chatbotId);
-
-    // Get a sample chunk to verify embedding format
-    const { data: sample } = await supabaseAdmin
-      .from('document_chunks')
-      .select('id, chunk_index, content, embedding')
-      .eq('chatbot_id', chatbotId)
-      .limit(1)
-      .single();
-
-    // Run a test similarity search with threshold 0
-    const testQuery = 'test';
-    const testEmbedding = await embedText(testQuery);
-    const testEmbeddingStr = `[${testEmbedding.join(',')}]`;
-    const { data: topMatches, error: rpcError } = await supabaseAdmin.rpc('match_document_chunks', {
-      query_embedding: testEmbeddingStr,
-      match_chatbot_id: chatbotId,
-      match_conversation_id: null,
-      match_count: 5,
-      match_threshold: 0.0
-    });
-
-    res.json({
-      ok: true,
-      chatbotId,
-      totalChunks: count ?? 0,
-      countError: countError?.message ?? null,
-      sampleChunk: sample ? { id: sample.id, content: sample.content.slice(0, 100), hasEmbedding: !!sample.embedding } : null,
-      topMatchScores: topMatches ? (topMatches as any[]).map((c: any) => ({ score: c.similarity, preview: c.content.slice(0, 60) })) : [],
-      rpcError: rpcError?.message ?? null
-    });
-  } catch (err: any) {
-    res.status(500).json({ ok: false, error: err.message });
   }
 });
 
