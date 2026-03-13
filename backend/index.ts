@@ -17,6 +17,17 @@ const AI_PROVIDER = (process.env.AI_PROVIDER || 'groq').toLowerCase();
 const OLLAMA_BASE_URL = (process.env.OLLAMA_BASE_URL || 'http://localhost:11434').replace(/\/$/, '');
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'qwen2.5:7b-instruct';
 
+function getEnvInt(name: string, fallback: number) {
+  const value = Number.parseInt(process.env[name] || '', 10);
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+const RAG_MATCH_COUNT = getEnvInt('RAG_MATCH_COUNT', 6);
+const RAG_NEIGHBOR_WINDOW = getEnvInt('RAG_NEIGHBOR_WINDOW', 1);
+const RAG_MAX_CONTEXT_CHARS = getEnvInt('RAG_MAX_CONTEXT_CHARS', 4500);
+const CHAT_HISTORY_LIMIT = getEnvInt('CHAT_HISTORY_LIMIT', 3);
+const AI_MAX_OUTPUT_TOKENS = getEnvInt('AI_MAX_OUTPUT_TOKENS', 512);
+
 // Initialize Groq client
 const groq = process.env.GROQ_API_KEY
   ? new Groq({ apiKey: process.env.GROQ_API_KEY })
@@ -73,7 +84,7 @@ async function createChatCompletion(messages: any[], ragContextFound: boolean) {
         stream: false,
         options: {
           temperature: ragContextFound ? 0.1 : 0.7,
-          num_predict: 512
+          num_predict: AI_MAX_OUTPUT_TOKENS
         }
       })
     });
@@ -98,7 +109,7 @@ async function createChatCompletion(messages: any[], ragContextFound: boolean) {
     messages,
     model: 'llama-3.3-70b-versatile',
     temperature: ragContextFound ? 0.1 : 0.7,
-    max_tokens: 1024,
+    max_tokens: AI_MAX_OUTPUT_TOKENS,
     top_p: 1,
     stream: false
   });
@@ -107,6 +118,37 @@ async function createChatCompletion(messages: any[], ragContextFound: boolean) {
     response: completion.choices[0]?.message?.content || "I'm sorry, I couldn't generate a response. Please try again.",
     model: completion.model,
     tokensUsed: completion.usage?.total_tokens || 0
+  };
+}
+
+function buildRagContext(chunks: Array<{ content: string }>, maxChars: number) {
+  const selected: string[] = [];
+  let usedChars = 0;
+
+  for (const chunk of chunks) {
+    const text = chunk.content?.trim();
+    if (!text) continue;
+
+    const separatorLength = selected.length > 0 ? '\n\n---\n\n'.length : 0;
+    const nextLength = usedChars + separatorLength + text.length;
+
+    if (nextLength <= maxChars) {
+      selected.push(text);
+      usedChars = nextLength;
+      continue;
+    }
+
+    if (selected.length === 0) {
+      selected.push(text.slice(0, maxChars));
+      usedChars = selected[0].length;
+    }
+    break;
+  }
+
+  return {
+    context: selected.join('\n\n---\n\n'),
+    chunkCount: selected.length,
+    usedChars
   };
 }
 
@@ -296,7 +338,7 @@ app.post('/api/chat', rateLimitMiddleware, async (req: Request, res: Response) =
     // Build system prompt with chatbot context and user name
     let systemPrompt = `You are ${chatbotContext?.name || 'a helpful AI assistant'}. ${
       chatbotContext?.description ? chatbotContext.description + '. ' : ''
-    }You provide helpful, accurate, and friendly responses. Keep your answers concise and relevant.`;
+    }You provide helpful, accurate, and friendly responses. Keep your answers concise and relevant. Prioritize completeness of the main answer over extra detail. If the user asks for a plan, routine, list, schedule, or set of items, include all important item names first, then add brief details only if space allows.`;
     
     // Add personalization instruction if user name is available
     if (userName && userName.trim()) {
@@ -313,7 +355,7 @@ app.post('/api/chat', rateLimitMiddleware, async (req: Request, res: Response) =
           query_embedding: queryEmbedding,
           match_chatbot_id: chatbotId,
           match_conversation_id: conversationId || null,
-          match_count: 12,
+          match_count: RAG_MATCH_COUNT,
           match_threshold: 0.1
         });
 
@@ -323,7 +365,7 @@ app.post('/api/chat', rateLimitMiddleware, async (req: Request, res: Response) =
           ragContextFound = true;
 
           // ── Adjacent chunk expansion ──────────────────────────────────────
-          // For each retrieved chunk, also fetch its neighbours (±2 indexes)
+          // For each retrieved chunk, also fetch a small neighbour window
           // from the same source so we never get half a section.
           const matchedChunks = chunks as any[];
           const seen = new Set<string>(matchedChunks.map((c: any) => c.id));
@@ -338,8 +380,8 @@ app.post('/api/chat', rateLimitMiddleware, async (req: Request, res: Response) =
           }
 
           for (const [sourceId, indexes] of sourceMap.entries()) {
-            const minIdx = Math.max(0, Math.min(...indexes) - 2);
-            const maxIdx = Math.max(...indexes) + 2;
+            const minIdx = Math.max(0, Math.min(...indexes) - RAG_NEIGHBOR_WINDOW);
+            const maxIdx = Math.max(...indexes) + RAG_NEIGHBOR_WINDOW;
             const { data: neighbours } = await supabaseAdmin
               .from('document_chunks')
               .select('id, content, chunk_index, source_id')
@@ -364,9 +406,9 @@ app.post('/api/chat', rateLimitMiddleware, async (req: Request, res: Response) =
             (a.chunk_index ?? 0) - (b.chunk_index ?? 0)
           );
 
-          console.log(`RAG: ${matchedChunks.length} matched + ${expandedChunks.length - matchedChunks.length} neighbours = ${expandedChunks.length} total chunks`);
-          const ragContext = expandedChunks.map((c: any) => c.content).join('\n\n---\n\n');
-          systemPrompt += `\n\n### Knowledge Base Context\nUse the information below to answer the user's question accurately. Base your answer on this context. You may apply simple common-sense reasoning to bridge terminology in the context to the user's question (e.g. numbered items map to natural names, abbreviations have standard meanings). Do not invent facts not supported by the context. If the answer cannot be determined even with reasonable inference, say so clearly.\n\n${ragContext}\n---`;
+          const ragContextResult = buildRagContext(expandedChunks, RAG_MAX_CONTEXT_CHARS);
+          console.log(`RAG: ${matchedChunks.length} matched + ${expandedChunks.length - matchedChunks.length} neighbours; using ${ragContextResult.chunkCount} chunks / ${ragContextResult.usedChars} chars`);
+          systemPrompt += `\n\n### Knowledge Base Context\nUse the information below to answer the user's question accurately. Base your answer on this context. You may apply simple common-sense reasoning to bridge terminology in the context to the user's question (e.g. numbered items map to natural names, abbreviations have standard meanings). Do not invent facts not supported by the context. If the answer cannot be determined even with reasonable inference, say so clearly. If the context contains an ordered or named list, preserve all primary item names in your answer even if you omit secondary fields like instructions, equipment, sets, or rest times.\n\n${ragContextResult.context}\n---`;
         } else {
           // Log top scores even when nothing passes threshold to help diagnose
           const { data: topChunks } = await supabaseAdmin.rpc('match_document_chunks', {
@@ -400,9 +442,9 @@ app.post('/api/chat', rateLimitMiddleware, async (req: Request, res: Response) =
       }
     ];
 
-    // Add conversation history if provided (last 5 messages for context)
+    // Add limited conversation history so the prompt stays small.
     if (conversationHistory && Array.isArray(conversationHistory)) {
-      const recentHistory = conversationHistory.slice(-5);
+      const recentHistory = conversationHistory.slice(-CHAT_HISTORY_LIMIT);
       recentHistory.forEach((msg: any) => {
         messages.push({
           role: msg.role === 'assistant' ? 'assistant' : 'user',
@@ -639,6 +681,7 @@ app.listen(PORT, () => {
   console.log(`🤖 Chatbot backend running on http://localhost:${PORT}`);
   console.log(`✅ AI provider: ${AI_PROVIDER}`);
   console.log(`✅ Groq API key configured: ${!!process.env.GROQ_API_KEY}`);
+  console.log(`✅ RAG limits: matches=${RAG_MATCH_COUNT}, neighbours=${RAG_NEIGHBOR_WINDOW}, contextChars=${RAG_MAX_CONTEXT_CHARS}, history=${CHAT_HISTORY_LIMIT}, output=${AI_MAX_OUTPUT_TOKENS}`);
   if (AI_PROVIDER === 'ollama') {
     console.log(`✅ Ollama endpoint: ${OLLAMA_BASE_URL}`);
     console.log(`✅ Ollama model: ${OLLAMA_MODEL}`);
