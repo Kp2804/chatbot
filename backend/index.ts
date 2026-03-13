@@ -13,11 +13,14 @@ dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+const AI_PROVIDER = (process.env.AI_PROVIDER || 'groq').toLowerCase();
+const OLLAMA_BASE_URL = (process.env.OLLAMA_BASE_URL || 'http://localhost:11434').replace(/\/$/, '');
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'qwen2.5:7b-instruct';
 
 // Initialize Groq client
-const groq = new Groq({
-  apiKey: process.env.GROQ_API_KEY
-});
+const groq = process.env.GROQ_API_KEY
+  ? new Groq({ apiKey: process.env.GROQ_API_KEY })
+  : null;
 
 // Initialize Supabase admin client (service key bypasses RLS for server-side ops)
 const supabaseAdmin = (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY)
@@ -56,6 +59,56 @@ async function embedText(text: string): Promise<number[]> {
 
 // Warm up on start (non-blocking)
 getEmbeddingPipeline().catch(() => {});
+
+async function createChatCompletion(messages: any[], ragContextFound: boolean) {
+  if (AI_PROVIDER === 'ollama') {
+    const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: OLLAMA_MODEL,
+        messages,
+        stream: false,
+        options: {
+          temperature: ragContextFound ? 0.1 : 0.7,
+          num_predict: 512
+        }
+      })
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data?.error || `Ollama request failed with status ${response.status}`);
+    }
+
+    return {
+      response: data?.message?.content || "I'm sorry, I couldn't generate a response. Please try again.",
+      model: data?.model || OLLAMA_MODEL,
+      tokensUsed: data?.prompt_eval_count || 0
+    };
+  }
+
+  if (!groq) {
+    throw new Error('GROQ_API_KEY is missing and AI_PROVIDER is not set to ollama');
+  }
+
+  const completion = await groq.chat.completions.create({
+    messages,
+    model: 'llama-3.3-70b-versatile',
+    temperature: ragContextFound ? 0.1 : 0.7,
+    max_tokens: 1024,
+    top_p: 1,
+    stream: false
+  });
+
+  return {
+    response: completion.choices[0]?.message?.content || "I'm sorry, I couldn't generate a response. Please try again.",
+    model: completion.model,
+    tokensUsed: completion.usage?.total_tokens || 0
+  };
+}
 
 // ── Text chunker ─────────────────────────────────────────────────────────────
 // Handles plain prose, numbered/headed sections, and table-like rows.
@@ -256,9 +309,8 @@ app.post('/api/chat', rateLimitMiddleware, async (req: Request, res: Response) =
     if (chatbotId && supabaseAdmin) {
       try {
         const queryEmbedding = await embedText(message);
-        const embeddingStr = `[${queryEmbedding.join(',')}]`;
         const { data: chunks, error: rpcError } = await supabaseAdmin.rpc('match_document_chunks', {
-          query_embedding: embeddingStr,
+          query_embedding: queryEmbedding,
           match_chatbot_id: chatbotId,
           match_conversation_id: conversationId || null,
           match_count: 12,
@@ -318,14 +370,14 @@ app.post('/api/chat', rateLimitMiddleware, async (req: Request, res: Response) =
         } else {
           // Log top scores even when nothing passes threshold to help diagnose
           const { data: topChunks } = await supabaseAdmin.rpc('match_document_chunks', {
-            query_embedding: embeddingStr,
+            query_embedding: queryEmbedding,
             match_chatbot_id: chatbotId,
             match_conversation_id: null,
             match_count: 3,
             match_threshold: 0.0
           });
           const scores = topChunks ? (topChunks as any[]).map((c: any) => c.similarity?.toFixed(3)).join(', ') : 'none';
-          console.log(`RAG: no chunks passed threshold 0.35 for chatbot ${chatbotId}. Top scores: [${scores}]`);
+          console.log(`RAG: no chunks passed threshold 0.1 for chatbot ${chatbotId}. Top scores: [${scores}]`);
         }
       } catch (ragErr) {
         console.warn('RAG retrieval skipped:', (ragErr as any)?.message);
@@ -365,27 +417,16 @@ app.post('/api/chat', rateLimitMiddleware, async (req: Request, res: Response) =
       content: message
     });
 
-    // Call Groq API
-    const completion = await groq.chat.completions.create({
-      messages,
-      model: 'llama-3.3-70b-versatile', // Fast and capable model
-      temperature: ragContextFound ? 0.1 : 0.7,
-      max_tokens: 1024,
-      top_p: 1,
-      stream: false
-    });
-
-    const aiResponse = completion.choices[0]?.message?.content || 
-      "I'm sorry, I couldn't generate a response. Please try again.";
+    const completion = await createChatCompletion(messages, ragContextFound);
 
     res.json({ 
-      response: aiResponse,
+      response: completion.response,
       model: completion.model,
-      tokensUsed: completion.usage?.total_tokens || 0
+      tokensUsed: completion.tokensUsed
     });
 
   } catch (error: any) {
-    console.error('Error calling Groq API:', error);
+    console.error('Error calling AI provider:', error);
     res.status(500).json({ 
       error: 'Failed to generate AI response',
       details: error.message 
@@ -596,5 +637,10 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
 
 app.listen(PORT, () => {
   console.log(`🤖 Chatbot backend running on http://localhost:${PORT}`);
+  console.log(`✅ AI provider: ${AI_PROVIDER}`);
   console.log(`✅ Groq API key configured: ${!!process.env.GROQ_API_KEY}`);
+  if (AI_PROVIDER === 'ollama') {
+    console.log(`✅ Ollama endpoint: ${OLLAMA_BASE_URL}`);
+    console.log(`✅ Ollama model: ${OLLAMA_MODEL}`);
+  }
 });

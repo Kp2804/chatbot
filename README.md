@@ -76,6 +76,29 @@ npm run backend   # backend only
 
 Open http://localhost:5173 in your browser.
 
+### Use Ollama locally instead of Groq
+
+If you want the chatbot to generate answers with a local model on your Mac:
+
+1. Install and start Ollama
+2. Pull a model, for example:
+
+```bash
+ollama pull qwen2.5:7b-instruct
+```
+
+3. Update your `.env`:
+
+```bash
+AI_PROVIDER=ollama
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=qwen2.5:7b-instruct
+```
+
+4. Restart the backend server
+
+The existing PDF knowledge-base retrieval still works the same way. Only the final text generation step switches from Groq to Ollama.
+
 ---
 
 ## Project structure
