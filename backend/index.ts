@@ -1,3 +1,13 @@
+/**
+ * Chatbot Backend Service
+ *
+ * Features
+ * - Chat completion endpoint using Groq or Ollama
+ * - Retrieval Augmented Generation (RAG) using Supabase vector search
+ * - PDF knowledge base ingestion and chunk embedding
+ * - Session and persistent knowledge storage
+ * - Rate limiting per user
+ */
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -6,39 +16,46 @@ import multer from 'multer';
 import { createClient } from '@supabase/supabase-js';
 import { createRequire } from 'module';
 const _require = createRequire(import.meta.url);
-// Import directly from lib to skip pdf-parse's broken startup self-test
+
+// Direct import used to bypass pdf-parse ESM startup issue
 const pdfParse: (buffer: Buffer) => Promise<{ text: string }> = _require('pdf-parse/lib/pdf-parse.js');
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+
+// AI provider configuration
 const AI_PROVIDER = (process.env.AI_PROVIDER || 'groq').toLowerCase();
+
+// Ollama configuration (used only when provider = ollama)
 const OLLAMA_BASE_URL = (process.env.OLLAMA_BASE_URL || 'http://localhost:11434').replace(/\/$/, '');
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'qwen2.5:7b-instruct';
 
+ //Safely read numeric configuration from environment variables
 function getEnvInt(name: string, fallback: number) {
   const value = Number.parseInt(process.env[name] || '', 10);
   return Number.isFinite(value) && value > 0 ? value : fallback;
 }
 
+//RAG Configuration
 const RAG_MATCH_COUNT = getEnvInt('RAG_MATCH_COUNT', 6);
 const RAG_NEIGHBOR_WINDOW = getEnvInt('RAG_NEIGHBOR_WINDOW', 1);
 const RAG_MAX_CONTEXT_CHARS = getEnvInt('RAG_MAX_CONTEXT_CHARS', 4500);
 const CHAT_HISTORY_LIMIT = getEnvInt('CHAT_HISTORY_LIMIT', 3);
 const AI_MAX_OUTPUT_TOKENS = getEnvInt('AI_MAX_OUTPUT_TOKENS', 512);
 
-// Initialize Groq client
+// Groq LLM client
 const groq = process.env.GROQ_API_KEY
   ? new Groq({ apiKey: process.env.GROQ_API_KEY })
   : null;
 
-// Initialize Supabase admin client (service key bypasses RLS for server-side ops)
+// Supabase admin client (service key bypasses RLS)
 const supabaseAdmin = (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY)
   ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY)
   : null;
 
-// ── Multer: memory storage, PDF only, 5 MB max ──────────────────────────────
+//   File Upload (PDF only)
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
@@ -51,7 +68,8 @@ const upload = multer({
   }
 });
 
-// ── Local embedding pipeline (@xenova/transformers, ~80 MB, cached) ──────────
+//Embedding Pipeline
+//Uses Xenova transformers
 let embeddingPipeline: any = null;
 
 async function getEmbeddingPipeline() {
@@ -68,10 +86,13 @@ async function embedText(text: string): Promise<number[]> {
   return Array.from(output.data as Float32Array);
 }
 
-// Warm up on start (non-blocking)
+// Warm up embedding model
 getEmbeddingPipeline().catch(() => {});
 
+//   LLM Completion Wrapper
 async function createChatCompletion(messages: any[], ragContextFound: boolean) {
+  
+  // Local inference via Ollama
   if (AI_PROVIDER === 'ollama') {
     const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
       method: 'POST',
@@ -101,6 +122,7 @@ async function createChatCompletion(messages: any[], ragContextFound: boolean) {
     };
   }
 
+  // Hosted inference via Groq
   if (!groq) {
     throw new Error('GROQ_API_KEY is missing and AI_PROVIDER is not set to ollama');
   }
@@ -121,6 +143,10 @@ async function createChatCompletion(messages: any[], ragContextFound: boolean) {
   };
 }
 
+/**
+ * Combines retrieved document chunks into a single context window
+ * while respecting max prompt size.
+ */
 function buildRagContext(chunks: Array<{ content: string }>, maxChars: number) {
   const selected: string[] = [];
   let usedChars = 0;
@@ -138,6 +164,7 @@ function buildRagContext(chunks: Array<{ content: string }>, maxChars: number) {
       continue;
     }
 
+        // fallback if first chunk exceeds limit
     if (selected.length === 0) {
       selected.push(text.slice(0, maxChars));
       usedChars = selected[0].length;
@@ -152,9 +179,14 @@ function buildRagContext(chunks: Array<{ content: string }>, maxChars: number) {
   };
 }
 
-// ── Text chunker ─────────────────────────────────────────────────────────────
-// Handles plain prose, numbered/headed sections, and table-like rows.
-// Section headings are prepended to each chunk so retrieval preserves context.
+
+/**
+ * Splits document text into embedding chunks.
+ * Handles:
+ * - headings
+ * - prose
+ * - table-like rows
+ */
 function chunkText(text: string, chunkSize = 400, overlap = 80): string[] {
   const lines = text.split('\n');
   const segments: string[] = [];
@@ -311,6 +343,7 @@ setInterval(() => {
   }
 }, 60 * 60 * 1000);
 
+//Middleware
 app.use(cors());
 app.use(express.json());
 
