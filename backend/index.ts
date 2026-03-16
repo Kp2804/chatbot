@@ -15,6 +15,7 @@ import Groq from 'groq-sdk';
 import multer from 'multer';
 import { createClient } from '@supabase/supabase-js';
 import { createRequire } from 'module';
+import crypto from 'crypto';
 const _require = createRequire(import.meta.url);
 
 // Direct import used to bypass pdf-parse ESM startup issue
@@ -282,6 +283,283 @@ function chunkText(text: string, chunkSize = 400, overlap = 80): string[] {
   }
   if (current.trim().length >= 20) chunks.push(current.trim());
   return chunks;
+}
+
+type WebsiteScope = 'single_page' | 'linked_pages' | 'full_domain' | 'specific_paths_only';
+type SyncFrequency = 'manual' | 'weekly' | 'monthly';
+
+interface WebsiteCrawlRules {
+  includePaths: string[];
+  excludePaths: string[];
+  maxPages: number;
+  crawlDepth: number;
+  ignoreQueryParams: boolean;
+  followExternalLinks: boolean;
+  strictSourceMode: boolean;
+  autoResyncFrequency: SyncFrequency;
+}
+
+interface WebsitePreviewRequest {
+  url: string;
+  scope: WebsiteScope;
+  rules: WebsiteCrawlRules;
+}
+
+interface CrawledPage {
+  url: string;
+  normalizedUrl: string;
+  title: string;
+  text: string;
+  contentSize: number;
+  depth: number;
+  status: 'ready' | 'duplicate' | 'thin' | 'excluded' | 'failed';
+  warning?: string;
+}
+
+function normalizeWebsiteRules(rules: Partial<WebsiteCrawlRules> | undefined): WebsiteCrawlRules {
+  return {
+    includePaths: Array.isArray(rules?.includePaths) ? rules!.includePaths.filter(Boolean) : [],
+    excludePaths: Array.isArray(rules?.excludePaths) ? rules!.excludePaths.filter(Boolean) : [],
+    maxPages: Math.min(Math.max(Number(rules?.maxPages) || 25, 1), 250),
+    crawlDepth: Math.min(Math.max(Number(rules?.crawlDepth) || 2, 0), 6),
+    ignoreQueryParams: rules?.ignoreQueryParams !== false,
+    followExternalLinks: !!rules?.followExternalLinks,
+    strictSourceMode: !!rules?.strictSourceMode,
+    autoResyncFrequency: rules?.autoResyncFrequency === 'weekly' || rules?.autoResyncFrequency === 'monthly'
+      ? rules.autoResyncFrequency
+      : 'manual'
+  };
+}
+
+function normalizePageUrl(rawUrl: string, ignoreQueryParams: boolean) {
+  const parsed = new URL(rawUrl);
+  parsed.hash = '';
+  if (ignoreQueryParams) parsed.search = '';
+  parsed.pathname = parsed.pathname.replace(/\/+$/, '') || '/';
+  return parsed.toString();
+}
+
+function shouldIncludeUrl(rawUrl: string, rootUrl: URL, scope: WebsiteScope, rules: WebsiteCrawlRules) {
+  const candidate = new URL(rawUrl);
+  const sameHost = candidate.hostname === rootUrl.hostname;
+  const sameDomain = sameHost || candidate.hostname.endsWith(`.${rootUrl.hostname}`);
+
+  if (!rules.followExternalLinks && !sameDomain) return false;
+  if (scope !== 'full_domain' && !sameHost) return false;
+
+  const path = candidate.pathname || '/';
+  if (rules.excludePaths.some((value) => path.startsWith(value))) return false;
+  if (scope === 'specific_paths_only') {
+    return rules.includePaths.length > 0 && rules.includePaths.some((value) => path.startsWith(value));
+  }
+  if (rules.includePaths.length > 0 && !rules.includePaths.some((value) => path.startsWith(value))) return false;
+
+  return true;
+}
+
+function extractHtmlTitle(html: string, fallbackUrl: string) {
+  const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  const title = titleMatch?.[1]?.replace(/\s+/g, ' ').trim();
+  return title || new URL(fallbackUrl).pathname || fallbackUrl;
+}
+
+function decodeHtmlEntities(value: string) {
+  return value
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>');
+}
+
+function extractCleanText(html: string, strictSourceMode: boolean) {
+  const candidate = strictSourceMode
+    ? (html.match(/<(main|article)[^>]*>[\s\S]*?<\/(main|article)>/i)?.[0] || html)
+    : html;
+
+  return decodeHtmlEntities(
+    candidate
+      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+      .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+      .replace(/<noscript[\s\S]*?<\/noscript>/gi, ' ')
+      .replace(/<svg[\s\S]*?<\/svg>/gi, ' ')
+      .replace(/<img[^>]*alt=["']([^"']+)["'][^>]*>/gi, ' $1 ')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+  );
+}
+
+function extractLinks(html: string, baseUrl: string) {
+  const results = new Set<string>();
+  const regex = /<a[^>]+href=["']([^"'#]+)["']/gi;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(html)) !== null) {
+    try {
+      const resolved = new URL(match[1], baseUrl);
+      if (resolved.protocol === 'http:' || resolved.protocol === 'https:') {
+        results.add(resolved.toString());
+      }
+    } catch {
+      // Ignore malformed href values
+    }
+  }
+  return Array.from(results);
+}
+
+async function fetchHtmlPage(url: string) {
+  const response = await fetch(url, {
+    headers: {
+      'User-Agent': 'NexusChatbotIndexer/1.0 (+website indexing)'
+    }
+  });
+  if (!response.ok) throw new Error(`Failed to fetch (${response.status})`);
+
+  const contentType = response.headers.get('content-type') || '';
+  if (!contentType.includes('text/html')) {
+    throw new Error('Unsupported content type');
+  }
+
+  const html = await response.text();
+  return { html, finalUrl: response.url || url };
+}
+
+async function crawlWebsitePreview(input: WebsitePreviewRequest) {
+  const rootUrl = new URL(input.url);
+  const rules = normalizeWebsiteRules(input.rules);
+  const queue: Array<{ url: string; depth: number }> = [{ url: rootUrl.toString(), depth: 0 }];
+  const visited = new Set<string>();
+  const discovered = new Set<string>();
+  const pages: CrawledPage[] = [];
+  const excludedPages = new Set<string>();
+  const warnings: Array<{ type: 'duplicate' | 'thin' | 'failed'; url: string; message: string }> = [];
+  const contentHashes = new Map<string, string>();
+  let failedPages = 0;
+
+  while (queue.length > 0 && pages.length < rules.maxPages) {
+    const current = queue.shift()!;
+    let normalizedCurrent: string;
+
+    try {
+      normalizedCurrent = normalizePageUrl(current.url, rules.ignoreQueryParams);
+    } catch {
+      continue;
+    }
+
+    if (visited.has(normalizedCurrent)) continue;
+    visited.add(normalizedCurrent);
+    discovered.add(normalizedCurrent);
+
+    if (!shouldIncludeUrl(normalizedCurrent, rootUrl, input.scope, rules)) {
+      excludedPages.add(normalizedCurrent);
+      continue;
+    }
+
+    try {
+      const { html, finalUrl } = await fetchHtmlPage(normalizedCurrent);
+      const finalNormalized = normalizePageUrl(finalUrl, rules.ignoreQueryParams);
+      const title = extractHtmlTitle(html, finalNormalized);
+      const text = extractCleanText(html, rules.strictSourceMode);
+      const contentSize = text.length;
+      const hash = crypto.createHash('sha1').update(text.toLowerCase()).digest('hex');
+
+      let status: CrawledPage['status'] = 'ready';
+      let warning: string | undefined;
+      if (contentSize < 250) {
+        status = 'thin';
+        warning = 'Low-content page';
+        warnings.push({ type: 'thin', url: finalNormalized, message: 'This page looks too thin to contribute meaningful answers.' });
+      } else if (contentHashes.has(hash)) {
+        status = 'duplicate';
+        warning = `Similar to ${contentHashes.get(hash)}`;
+        warnings.push({ type: 'duplicate', url: finalNormalized, message: 'This page appears to duplicate content from another page.' });
+      } else {
+        contentHashes.set(hash, finalNormalized);
+      }
+
+      pages.push({
+        url: finalUrl,
+        normalizedUrl: finalNormalized,
+        title,
+        text,
+        contentSize,
+        depth: current.depth,
+        status,
+        warning
+      });
+
+      const canTraverse = input.scope !== 'single_page' && current.depth < rules.crawlDepth;
+      if (canTraverse) {
+        for (const link of extractLinks(html, finalUrl)) {
+          try {
+            const normalizedLink = normalizePageUrl(link, rules.ignoreQueryParams);
+            discovered.add(normalizedLink);
+            if (shouldIncludeUrl(normalizedLink, rootUrl, input.scope, rules)) {
+              if (!visited.has(normalizedLink)) {
+                queue.push({ url: normalizedLink, depth: current.depth + 1 });
+              }
+            } else {
+              excludedPages.add(normalizedLink);
+            }
+          } catch {
+            // Ignore malformed links
+          }
+        }
+      }
+    } catch (error: any) {
+      failedPages += 1;
+      warnings.push({ type: 'failed', url: normalizedCurrent, message: error?.message || 'Failed to fetch page' });
+      pages.push({
+        url: normalizedCurrent,
+        normalizedUrl: normalizedCurrent,
+        title: normalizedCurrent,
+        text: '',
+        contentSize: 0,
+        depth: current.depth,
+        status: 'failed',
+        warning: error?.message || 'Failed to fetch page'
+      });
+    }
+  }
+
+  const selectedPages = pages.filter((page) => page.status === 'ready');
+  const estimatedContentSize = selectedPages.reduce((sum, page) => sum + page.contentSize, 0);
+
+  return {
+    rules,
+    pages,
+    totals: {
+      pagesDiscovered: discovered.size,
+      pagesSelected: selectedPages.length,
+      pagesExcluded: excludedPages.size,
+      pagesSkipped: pages.filter((page) => page.status === 'duplicate' || page.status === 'thin').length,
+      failedPages,
+      estimatedContentSize
+    },
+    warnings
+  };
+}
+
+async function deleteKnowledgeSourceChunks(sourceId: string) {
+  const { error } = await supabaseAdmin!
+    .from('document_chunks')
+    .delete()
+    .eq('source_id', sourceId);
+  if (error) throw error;
+}
+
+async function retrieveRelevantChunks(chatbotId: string, message: string, conversationId?: string | null) {
+  const queryEmbedding = await embedText(message);
+  const { data: chunks, error: rpcError } = await supabaseAdmin!.rpc('match_document_chunks', {
+    query_embedding: queryEmbedding,
+    match_chatbot_id: chatbotId,
+    match_conversation_id: conversationId || null,
+    match_count: RAG_MATCH_COUNT,
+    match_threshold: 0.1
+  });
+  if (rpcError) throw new Error(rpcError.message);
+  return (chunks || []) as any[];
 }
 
 // Rate limiting: 50 messages per user per day
@@ -667,6 +945,376 @@ app.get('/api/knowledge/:chatbotId', async (req: Request, res: Response) => {
     res.json(data || []);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/knowledge/website/preview', async (req: Request, res: Response) => {
+  try {
+    if (!supabaseAdmin) return res.status(503).json({ error: 'Supabase not configured' });
+
+    const user = await requireAuth(req, res);
+    if (!user) return;
+
+    const { chatbotId, url, scope, rules } = req.body || {};
+    if (!chatbotId) return res.status(400).json({ error: 'chatbotId is required' });
+    if (!url) return res.status(400).json({ error: 'Website URL is required' });
+    if (!scope) return res.status(400).json({ error: 'Crawl scope is required' });
+
+    const owns = await requireChatbotOwner(user.id, chatbotId, res);
+    if (!owns) return;
+
+    const preview = await crawlWebsitePreview({
+      url,
+      scope,
+      rules: normalizeWebsiteRules(rules)
+    });
+
+    res.json(preview);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Preview failed' });
+  }
+});
+
+app.post('/api/knowledge/website/index', async (req: Request, res: Response) => {
+  try {
+    if (!supabaseAdmin) return res.status(503).json({ error: 'Supabase not configured' });
+
+    const user = await requireAuth(req, res);
+    if (!user) return;
+
+    const { chatbotId, url, scope, rules } = req.body || {};
+    if (!chatbotId) return res.status(400).json({ error: 'chatbotId is required' });
+    if (!url) return res.status(400).json({ error: 'Website URL is required' });
+
+    const owns = await requireChatbotOwner(user.id, chatbotId, res);
+    if (!owns) return;
+
+    const normalizedRules = normalizeWebsiteRules(rules);
+    const preview = await crawlWebsitePreview({ chatbotId, url, scope, rules: normalizedRules } as any);
+    const selectedPages = preview.pages.filter((page) => page.status === 'ready');
+    const failedPages = preview.pages.filter((page) => page.status === 'failed').length;
+
+    const { data: existingSources } = await supabaseAdmin
+      .from('chatbot_knowledge_sources')
+      .select('id, content')
+      .eq('chatbot_id', chatbotId)
+      .eq('source_type', 'website');
+
+    const existingByUrl = new Map<string, { id: string; content: string | null }>();
+    for (const row of existingSources || []) {
+      if (row.content) existingByUrl.set(row.content, row as any);
+    }
+
+    let totalChunks = 0;
+    const now = new Date().toISOString();
+    const pageResults: any[] = [];
+
+    for (const page of selectedPages) {
+      const chunks = chunkText(page.text);
+      const embeddings: number[][] = [];
+      for (let i = 0; i < chunks.length; i += 16) {
+        const batch = chunks.slice(i, i + 16);
+        const batchEmbeddings = await Promise.all(batch.map((value) => embedText(value)));
+        embeddings.push(...batchEmbeddings);
+      }
+
+      const existing = existingByUrl.get(page.normalizedUrl);
+      let sourceId = existing?.id || null;
+
+      if (sourceId) {
+        await deleteKnowledgeSourceChunks(sourceId);
+        const { error: updateError } = await supabaseAdmin
+          .from('chatbot_knowledge_sources')
+          .update({
+            title: page.title,
+            content: page.normalizedUrl,
+            status: 'processing',
+            chunk_count: 0,
+            metadata: {
+              url: page.normalizedUrl,
+              contentSize: page.contentSize,
+              warning: page.warning || null,
+              strictSourceMode: normalizedRules.strictSourceMode,
+              autoResyncFrequency: normalizedRules.autoResyncFrequency
+            },
+            last_synced_at: now,
+            updated_at: now
+          })
+          .eq('id', sourceId);
+        if (updateError) throw updateError;
+      } else {
+        const { data: insertedSource, error: insertSourceError } = await supabaseAdmin
+          .from('chatbot_knowledge_sources')
+          .insert({
+            chatbot_id: chatbotId,
+            source_type: 'website',
+            title: page.title,
+            content: page.normalizedUrl,
+            status: 'processing',
+            chunk_count: 0,
+            file_size: page.contentSize,
+            metadata: {
+              url: page.normalizedUrl,
+              contentSize: page.contentSize,
+              warning: page.warning || null,
+              strictSourceMode: normalizedRules.strictSourceMode,
+              autoResyncFrequency: normalizedRules.autoResyncFrequency
+            },
+            last_synced_at: now,
+            updated_at: now
+          })
+          .select('id')
+          .single();
+        if (insertSourceError) throw insertSourceError;
+        sourceId = insertedSource.id;
+      }
+
+      const chunkRows = chunks.map((content, index) => ({
+        chatbot_id: chatbotId,
+        source_id: sourceId,
+        conversation_id: null,
+        is_session_only: false,
+        content,
+        chunk_index: index,
+        embedding: `[${embeddings[index].join(',')}]`,
+        metadata: {
+          sourceType: 'website',
+          title: page.title,
+          url: page.normalizedUrl,
+          contentSize: page.contentSize,
+          priority: false
+        }
+      }));
+
+      const { error: chunkInsertError } = await supabaseAdmin.from('document_chunks').insert(chunkRows);
+      if (chunkInsertError) throw chunkInsertError;
+
+      const { error: finalUpdateError } = await supabaseAdmin
+        .from('chatbot_knowledge_sources')
+        .update({
+          status: 'active',
+          chunk_count: chunks.length,
+          file_size: page.contentSize,
+          updated_at: now,
+          last_synced_at: now
+        })
+        .eq('id', sourceId);
+      if (finalUpdateError) throw finalUpdateError;
+
+      totalChunks += chunks.length;
+      pageResults.push({
+        sourceId,
+        title: page.title,
+        url: page.normalizedUrl,
+        status: 'active',
+        chunkCount: chunks.length,
+        lastIndexed: now
+      });
+    }
+
+    res.json({
+      success: true,
+      stages: [
+        'discovering pages',
+        'fetching content',
+        'extracting clean text',
+        'removing duplicates',
+        'chunking content',
+        'indexing complete'
+      ],
+      summary: {
+        totalIndexedPages: selectedPages.length,
+        totalChunks,
+        pagesSkipped: preview.totals.pagesSkipped,
+        failedPages,
+        lastSynced: now
+      },
+      preview: preview.totals,
+      pageResults
+    });
+  } catch (err: any) {
+    console.error('Website indexing error:', err);
+    res.status(500).json({ error: err.message || 'Website indexing failed' });
+  }
+});
+
+app.post('/api/knowledge/website/test', async (req: Request, res: Response) => {
+  try {
+    if (!supabaseAdmin) return res.status(503).json({ error: 'Supabase not configured' });
+
+    const user = await requireAuth(req, res);
+    if (!user) return;
+
+    const { chatbotId, question } = req.body || {};
+    if (!chatbotId) return res.status(400).json({ error: 'chatbotId is required' });
+    if (!question) return res.status(400).json({ error: 'Question is required' });
+
+    const owns = await requireChatbotOwner(user.id, chatbotId, res);
+    if (!owns) return;
+
+    const matchedChunks = await retrieveRelevantChunks(chatbotId, question, null);
+    if (matchedChunks.length === 0) {
+      return res.json({
+        answer: 'I could not find a strong answer in this chatbot’s indexed website content yet.',
+        citations: []
+      });
+    }
+
+    const sourceIds = Array.from(new Set(matchedChunks.map((chunk) => chunk.source_id).filter(Boolean)));
+    const { data: sources } = await supabaseAdmin
+      .from('chatbot_knowledge_sources')
+      .select('id, title, content, metadata')
+      .in('id', sourceIds);
+
+    const sourceMap = new Map((sources || []).map((source: any) => [source.id, source]));
+    const context = buildRagContext(matchedChunks, RAG_MAX_CONTEXT_CHARS);
+    const completion = await createChatCompletion([
+      {
+        role: 'system',
+        content: `You are a website knowledge QA assistant. Answer using only the indexed website context below. Keep the answer crisp, useful, and business-friendly. If the answer is not supported, say so clearly.\n\n${context.context}\n---`
+      },
+      {
+        role: 'user',
+        content: question
+      }
+    ], true);
+
+    const citations = matchedChunks.slice(0, 3).map((chunk) => {
+      const source = sourceMap.get(chunk.source_id);
+      return {
+        sourceId: chunk.source_id,
+        title: source?.title || 'Indexed page',
+        url: source?.content || source?.metadata?.url || null,
+        similarity: chunk.similarity
+      };
+    });
+
+    res.json({
+      answer: completion.response,
+      citations
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Test failed' });
+  }
+});
+
+app.post('/api/knowledge/website/source/:sourceId/reindex', async (req: Request, res: Response) => {
+  try {
+    if (!supabaseAdmin) return res.status(503).json({ error: 'Supabase not configured' });
+
+    const user = await requireAuth(req, res);
+    if (!user) return;
+
+    const sourceId = Array.isArray(req.params.sourceId) ? req.params.sourceId[0] : req.params.sourceId;
+    if (!sourceId) return res.status(400).json({ error: 'Missing source id' });
+    const { data: source, error: fetchError } = await supabaseAdmin
+      .from('chatbot_knowledge_sources')
+      .select('*')
+      .eq('id', sourceId)
+      .eq('source_type', 'website')
+      .maybeSingle();
+    if (fetchError || !source) return res.status(404).json({ error: 'Website source not found' });
+
+    const owns = await requireChatbotOwner(user.id, source.chatbot_id, res);
+    if (!owns) return;
+
+    const strictSourceMode = !!source.metadata?.strictSourceMode;
+    const { html, finalUrl } = await fetchHtmlPage(source.content);
+    const normalizedUrl = normalizePageUrl(finalUrl, true);
+    const text = extractCleanText(html, strictSourceMode);
+    const title = extractHtmlTitle(html, normalizedUrl);
+    const chunks = chunkText(text);
+    const embeddings = await Promise.all(chunks.map((chunk) => embedText(chunk)));
+
+    await deleteKnowledgeSourceChunks(sourceId);
+    const { error: chunkInsertError } = await supabaseAdmin.from('document_chunks').insert(
+      chunks.map((content, index) => ({
+        chatbot_id: source.chatbot_id,
+        source_id: sourceId,
+        content,
+        chunk_index: index,
+        embedding: `[${embeddings[index].join(',')}]`,
+        metadata: {
+          sourceType: 'website',
+          title,
+          url: normalizedUrl,
+          contentSize: text.length,
+          priority: !!source.priority
+        }
+      }))
+    );
+    if (chunkInsertError) throw chunkInsertError;
+
+    const now = new Date().toISOString();
+    const { error: sourceUpdateError } = await supabaseAdmin
+      .from('chatbot_knowledge_sources')
+      .update({
+        title,
+        content: normalizedUrl,
+        status: 'active',
+        chunk_count: chunks.length,
+        file_size: text.length,
+        last_synced_at: now,
+        updated_at: now,
+        metadata: {
+          ...(source.metadata || {}),
+          url: normalizedUrl,
+          contentSize: text.length
+        }
+      })
+      .eq('id', sourceId);
+    if (sourceUpdateError) throw sourceUpdateError;
+
+    res.json({
+      success: true,
+      sourceId,
+      title,
+      chunkCount: chunks.length,
+      lastIndexed: now
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Reindex failed' });
+  }
+});
+
+app.patch('/api/knowledge/website/source/:sourceId', async (req: Request, res: Response) => {
+  try {
+    if (!supabaseAdmin) return res.status(503).json({ error: 'Supabase not configured' });
+
+    const user = await requireAuth(req, res);
+    if (!user) return;
+
+    const { sourceId } = req.params;
+    const { priority } = req.body || {};
+    const { data: source, error: fetchError } = await supabaseAdmin
+      .from('chatbot_knowledge_sources')
+      .select('*')
+      .eq('id', sourceId)
+      .eq('source_type', 'website')
+      .maybeSingle();
+    if (fetchError || !source) return res.status(404).json({ error: 'Website source not found' });
+
+    const owns = await requireChatbotOwner(user.id, source.chatbot_id, res);
+    if (!owns) return;
+
+    const { data: updated, error: updateError } = await supabaseAdmin
+      .from('chatbot_knowledge_sources')
+      .update({
+        priority: !!priority,
+        metadata: {
+          ...(source.metadata || {}),
+          priority: !!priority
+        },
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', sourceId)
+      .select('*')
+      .single();
+    if (updateError) throw updateError;
+
+    res.json(updated);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Update failed' });
   }
 });
 

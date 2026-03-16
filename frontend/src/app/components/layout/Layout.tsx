@@ -21,7 +21,14 @@ import {
 } from "lucide-react";
 import { supabase } from "../../../lib/supabase";
 
-const navItems = [
+type NavItem = {
+  path: string;
+  icon: typeof MessageSquare;
+  label: string;
+  exact?: boolean;
+};
+
+const navItems: NavItem[] = [
   { path: "/app/chat", icon: MessageSquare, label: "Chat" },
   { path: "/app/workflows", icon: GitBranch, label: "Workflows" },
   { path: "/app/faq", icon: HelpCircle, label: "FAQ Manager" },
