@@ -1,0 +1,12 @@
+{
+  "css.validate": false,
+  "css.lint.compatibleVendorPrefixes": "ignore",
+  "css.lint.vendorPrefix": "ignore",
+  "css.lint.displayPropertyGrouping": "ignore",
+  "search.exclude": {
+    "**/dist": true
+  },
+  "files.watcherExclude": {
+    "**/dist/**": true
+  }
+}
