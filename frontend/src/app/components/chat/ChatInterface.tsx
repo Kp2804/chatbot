@@ -109,6 +109,55 @@ const migrateWorkflow = (wf: any): Workflow => {
 
 const BASE_CONVERSATIONS: Conversation[] = [];
 
+const UI_STRINGS = {
+  en: {
+    loading: "Loading...",
+    active: "Active",
+    manageBot: "Manage Bot",
+    refresh: "Refresh",
+    deleteChat: "Delete Chat",
+    conversations: "Conversations",
+    searchPlaceholder: "Search chats...",
+    totalChats: "Total Chats",
+    resolved: "Resolved",
+    welcomeTitle: "Welcome to Support Chat",
+    preparingChat: "Preparing your support chat…",
+    selectConversation: "Select an existing conversation from the sidebar or start a new one to get help.",
+    startNewChat: "Start New Chat",
+    aiBanner: "AI-powered support • Active Session",
+    startWorkflow: "START A WORKFLOW:",
+    endSession: "End Session",
+    quickFaqs: "Quick FAQs:",
+    messagePlaceholder: "Type a message... (Enter to send)",
+    uploadPdf: "Upload PDF to knowledge base",
+    stopRecording: "Stop recording",
+    voiceInput: "Voice input",
+  },
+  hi: {
+    loading: "लोड हो रहा है...",
+    active: "सक्रिय",
+    manageBot: "बॉट प्रबंधित करें",
+    refresh: "रीफ्रेश करें",
+    deleteChat: "चैट हटाएं",
+    conversations: "बातचीत",
+    searchPlaceholder: "चैट खोजें...",
+    totalChats: "कुल चैट",
+    resolved: "हल किए गए",
+    welcomeTitle: "सहायता चैट में स्वागत है",
+    preparingChat: "आपकी सहायता चैट तैयार हो रही है…",
+    selectConversation: "साइडबार से कोई मौजूदा बातचीत चुनें या मदद के लिए नई बातचीत शुरू करें।",
+    startNewChat: "नई चैट शुरू करें",
+    aiBanner: "AI-संचालित सहायता • सक्रिय सत्र",
+    startWorkflow: "वर्कफ़्लो शुरू करें:",
+    endSession: "सत्र समाप्त करें",
+    quickFaqs: "त्वरित FAQ:",
+    messagePlaceholder: "संदेश टाइप करें... (भेजने के लिए Enter दबाएं)",
+    uploadPdf: "PDF अपलोड करें",
+    stopRecording: "रिकॉर्डिंग बंद करें",
+    voiceInput: "वॉइस इनपुट",
+  },
+} as const;
+
 function renderContent(content: string) {
   return content.split("\n").map((line, i) => {
     const parts = line.split(/(\*\*[^*]+\*\*)/g);
@@ -190,6 +239,19 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
   const [pdfStatusMsg, setPdfStatusMsg] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+  const [language, setLanguage] = useState<'en' | 'hi'>('en');
+  const t = UI_STRINGS[language];
+  const [isTranslating, setIsTranslating] = useState(false);
+  const originalContentRef = useRef<Record<string, string>>({});
+  const translationCacheRef = useRef<Record<string, Record<string, string>>>({});
+  const textTranslationCacheRef = useRef<Record<string, Record<string, string>>>({});
+  const lastLanguageRef = useRef<'en' | 'hi'>('en');
+  const lastMessageCountRef = useRef(0);
+  const [translatedDynamicUI, setTranslatedDynamicUI] = useState<{
+    chatbotName: string;
+    faqQuestions: Record<string, string>;
+    nodeNames: Record<string, string>;
+  }>({ chatbotName: '', faqQuestions: {}, nodeNames: {} });
 
   const handlePDFUpload = async (file: File) => {
     if (!activeChatbotId) return;
@@ -250,7 +312,7 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
     const recognition = new SpeechRecognition();
     recognition.continuous = true;       // keep listening until user stops
     recognition.interimResults = true;   // stream partial results in real time
-    recognition.lang = "en-US";
+    recognition.lang = language === 'hi' ? 'hi-IN' : 'en-US';
 
     recognition.onstart = () => setIsRecording(true);
 
@@ -511,8 +573,142 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
       .select('*')
       .eq('conversation_id', convId)
       .order('timestamp', { ascending: true });
-    if (!error) setMessages(data || []);
+    if (!error && data) {
+      data.forEach((m: Message) => {
+        if (!originalContentRef.current[m.id]) originalContentRef.current[m.id] = m.content;
+      });
+      setMessages(data);
+      if (language !== 'en') applyLanguage(language, data);
+    }
   };
+
+  // Track originals for any new messages added while chatting
+  useEffect(() => {
+    messages.forEach(m => {
+      if (!originalContentRef.current[m.id]) originalContentRef.current[m.id] = m.content;
+    });
+  }, [messages]);
+
+  const applyLanguage = async (lang: 'en' | 'hi', currentMessages: Message[]) => {
+    const assistantMsgs = currentMessages.filter(m => m.role === 'assistant');
+    if (assistantMsgs.length === 0) return;
+
+    if (lang === 'en') {
+      setMessages(prev => prev.map(m =>
+        m.role === 'assistant' && originalContentRef.current[m.id]
+          ? { ...m, content: originalContentRef.current[m.id] }
+          : m
+      ));
+      return;
+    }
+
+    const toTranslate = assistantMsgs.filter(
+      m => !translationCacheRef.current[m.id]?.[lang] && originalContentRef.current[m.id]
+    );
+
+    if (toTranslate.length > 0) {
+      setIsTranslating(true);
+      try {
+        const texts = toTranslate.map(m => originalContentRef.current[m.id]);
+        const res = await fetch(`${backendUrl}/api/translate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ texts, language: lang })
+        });
+        const data = await res.json();
+        toTranslate.forEach((m, i) => {
+          if (!translationCacheRef.current[m.id]) translationCacheRef.current[m.id] = {};
+          translationCacheRef.current[m.id][lang] = data.translated[i];
+        });
+      } catch {
+        // silently fall back to originals
+      } finally {
+        setIsTranslating(false);
+      }
+    }
+
+    setMessages(prev => prev.map(m => {
+      if (m.role !== 'assistant') return m;
+      const cached = translationCacheRef.current[m.id]?.[lang];
+      return cached ? { ...m, content: cached } : m;
+    }));
+  };
+
+  const applyUILanguage = async (lang: 'en' | 'hi') => {
+    if (lang === 'en') {
+      setTranslatedDynamicUI({ chatbotName: '', faqQuestions: {}, nodeNames: {} });
+      return;
+    }
+
+    const textsToTranslate: string[] = [];
+    const textKeys: string[] = [];
+
+    const queueText = (text: string, key: string) => {
+      if (text && !textTranslationCacheRef.current[text]?.[lang]) {
+        textsToTranslate.push(text);
+        textKeys.push(key);
+      }
+    };
+
+    if (chatbot?.name) queueText(chatbot.name, 'chatbot_name');
+    faqs.forEach(f => queueText(f.question, `faq_${f.id}`));
+    workflows.forEach(w => w.nodes.forEach(n => { if (n.name) queueText(n.name, `node_${n.id}`); }));
+
+    if (textsToTranslate.length > 0) {
+      setIsTranslating(true);
+      try {
+        const res = await fetch(`${backendUrl}/api/translate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ texts: textsToTranslate, language: lang })
+        });
+        const data = await res.json();
+        textsToTranslate.forEach((text, i) => {
+          if (!textTranslationCacheRef.current[text]) textTranslationCacheRef.current[text] = {};
+          textTranslationCacheRef.current[text][lang] = data.translated[i];
+        });
+      } catch {
+        // silently fall back to originals
+      } finally {
+        setIsTranslating(false);
+      }
+    }
+
+    const getT = (text: string) => textTranslationCacheRef.current[text]?.[lang] || text;
+
+    const newUI = {
+      chatbotName: chatbot?.name ? getT(chatbot.name) : '',
+      faqQuestions: Object.fromEntries(faqs.map(f => [f.id, getT(f.question)])),
+      nodeNames: Object.fromEntries(
+        workflows.flatMap(w => w.nodes.filter(n => n.name).map(n => [n.id, getT(n.name)]))
+      ),
+    };
+    setTranslatedDynamicUI(newUI);
+  };
+
+  // Re-translate on language changes and newly-added messages in Hindi mode.
+  useEffect(() => {
+    if (messages.length === 0) {
+      lastLanguageRef.current = language;
+      lastMessageCountRef.current = 0;
+      return;
+    }
+
+    const languageChanged = lastLanguageRef.current !== language;
+    const messageCountChanged = lastMessageCountRef.current !== messages.length;
+
+    if (languageChanged || (messageCountChanged && language !== 'en')) {
+      applyLanguage(language, messages);
+    }
+
+    lastLanguageRef.current = language;
+    lastMessageCountRef.current = messages.length;
+  }, [language, messages]);
+
+  // Re-translate dynamic UI (chatbot name, FAQ questions, workflow node names) on language/data changes.
+  useEffect(() => {
+    applyUILanguage(language);
+  }, [language, chatbot, faqs, workflows]);
 
   const fetchFAQs = async () => {
     if (!activeChatbotId) return;
@@ -755,9 +951,15 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
                 description: chatbot?.description || 'A helpful chatbot'
               },
               userName: displayUserName,
-              conversationHistory: messages.slice(-5),
+              conversationHistory: messages.slice(-5).map((msg) => ({
+                ...msg,
+                content: msg.role === 'assistant'
+                  ? (originalContentRef.current[msg.id] || msg.content)
+                  : msg.content,
+              })),
               chatbotId: activeChatbotId,
-              conversationId: currentConvId
+              conversationId: currentConvId,
+              language
             })
           });
 
@@ -780,7 +982,13 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
             content: aiResponse,
           };
           const { data: savedBotMsg, error: botError } = await supabase.from('messages').insert([botMsg]).select().single();
-          if (savedBotMsg) setMessages(prev => [...prev, savedBotMsg]);
+          if (savedBotMsg) {
+            // Always store the English original before translation
+            originalContentRef.current[savedBotMsg.id] = savedBotMsg.content;
+            setMessages(prev => [...prev, savedBotMsg]);
+            // If Hindi mode is active, translate the new message immediately
+            if (language === 'hi') applyLanguage('hi', [savedBotMsg]);
+          }
           if (botError) console.error("Error sending bot response:", botError.message);
         } catch (error) {
           console.error('Error calling AI backend:', error);
@@ -791,7 +999,10 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
             content: "I'm experiencing technical difficulties. Please try again or check if the backend server is running.",
           };
           const { data: savedBotMsg } = await supabase.from('messages').insert([botMsg]).select().single();
-          if (savedBotMsg) setMessages(prev => [...prev, savedBotMsg]);
+          if (savedBotMsg) {
+            originalContentRef.current[savedBotMsg.id] = savedBotMsg.content;
+            setMessages(prev => [...prev, savedBotMsg]);
+          }
         }
         setIsTyping(false);
         fetchConversations();
@@ -875,7 +1086,7 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
       <div className="w-72 flex-shrink-0 border-r border-gray-300 dark:border-white/8 bg-gray-50 dark:bg-[#12121a] flex flex-col overflow-hidden">
         <div className="p-4 border-b border-gray-300 dark:border-white/8 flex-shrink-0">
           <div className="flex items-center justify-between mb-3">
-            <span className="text-black dark:text-white" style={{ fontSize: "0.9rem", fontWeight: 600 }}>Conversations</span>
+            <span className="text-black dark:text-white" style={{ fontSize: "0.9rem", fontWeight: 600 }}>{t.conversations}</span>
             <button
               type="button"
               onClick={handleCreateChat}
@@ -888,7 +1099,7 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
             <Search className="w-3.5 h-3.5 text-gray-600 dark:text-gray-600" />
             <input
               type="text"
-              placeholder="Search chats..."
+              placeholder={t.searchPlaceholder}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="bg-transparent text-gray-800 dark:text-gray-400 placeholder-gray-700 dark:placeholder-gray-600 focus:outline-none flex-1"
@@ -951,11 +1162,11 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
           <div className="grid grid-cols-2 gap-2">
             <div className="bg-gray-100 dark:bg-white/5 rounded-xl p-3 text-center">
               <div className="text-violet-500 dark:text-violet-400" style={{ fontSize: "1.1rem", fontWeight: 700 }}>{totalChatsAllTime}</div>
-              <div className="text-gray-700 dark:text-gray-600" style={{ fontSize: "0.65rem" }}>Total Chats</div>
+              <div className="text-gray-700 dark:text-gray-600" style={{ fontSize: "0.65rem" }}>{t.totalChats}</div>
             </div>
             <div className="bg-gray-100 dark:bg-white/5 rounded-xl p-3 text-center">
               <div className="text-emerald-500 dark:text-emerald-400" style={{ fontSize: "1.1rem", fontWeight: 700 }}>{resolvedRate}%</div>
-              <div className="text-gray-700 dark:text-gray-600" style={{ fontSize: "0.65rem" }}>Resolved</div>
+              <div className="text-gray-700 dark:text-gray-600" style={{ fontSize: "0.65rem" }}>{t.resolved}</div>
             </div>
           </div>
         </div>
@@ -965,21 +1176,59 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
       {/* Chat Area */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Chat Header */}
-        {activeConvId && (
+        {(embedded || activeConvId) && (
           <div className="h-14 border-b border-gray-300 dark:border-white/8 flex items-center justify-between px-5 flex-shrink-0 bg-white dark:bg-transparent">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 bg-gradient-to-br from-violet-500 to-indigo-600 rounded-lg flex items-center justify-center">
                 <Bot className="w-4 h-4 text-white" />
               </div>
               <div>
-                <div className="text-black dark:text-white" style={{ fontSize: "0.875rem", fontWeight: 600 }}>{chatbot?.name || "Loading..."}</div>
+                <div className="text-black dark:text-white" style={{ fontSize: "0.875rem", fontWeight: 600 }}>
+                  {(language === 'hi' && translatedDynamicUI.chatbotName) || chatbot?.name || t.loading}
+                </div>
                 <div className="flex items-center gap-1.5 text-emerald-500 dark:text-emerald-400" style={{ fontSize: "0.7rem" }}>
                   <span className="w-1.5 h-1.5 bg-emerald-500 dark:bg-emerald-400 rounded-full inline-block" />
-                  Active
+                  {t.active}
                 </div>
               </div>
+              {/* Language toggle — widget only (beside bot name) */}
+              {embedded && (
+                <div className={`flex items-center gap-0.5 bg-gray-100 dark:bg-white/5 border rounded-lg p-0.5 ml-1 transition-all ${isTranslating ? 'border-violet-400 dark:border-violet-500' : 'border-gray-300 dark:border-white/8'}`}>
+                  {(['en', 'hi'] as const).map((lang) => (
+                    <button
+                      key={lang}
+                      type="button"
+                      disabled={isTranslating}
+                      onClick={() => setLanguage(lang)}
+                      className={`px-2 py-1 rounded-md transition-all ${language === lang ? 'bg-white dark:bg-white/15 text-black dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'}`}
+                      style={{ fontSize: "0.68rem", fontWeight: language === lang ? 600 : 400 }}
+                    >
+                      {lang === 'en' ? 'EN' : 'हि'}
+                    </button>
+                  ))}
+                  {isTranslating && <span className="w-3 h-3 mx-0.5 border border-violet-400 border-t-transparent rounded-full animate-spin" />}
+                </div>
+              )}
             </div>
             <div className="flex items-center gap-2">
+              {/* Language toggle — website only (beside Manage Bot) */}
+              {!embedded && (
+                <div className={`flex items-center gap-0.5 bg-gray-100 dark:bg-white/5 border rounded-lg p-0.5 transition-all ${isTranslating ? 'border-violet-400 dark:border-violet-500' : 'border-gray-300 dark:border-white/8'}`}>
+                  {(['en', 'hi'] as const).map((lang) => (
+                    <button
+                      key={lang}
+                      type="button"
+                      disabled={isTranslating}
+                      onClick={() => setLanguage(lang)}
+                      className={`px-2 py-1 rounded-md transition-all ${language === lang ? 'bg-white dark:bg-white/15 text-black dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'}`}
+                      style={{ fontSize: "0.68rem", fontWeight: language === lang ? 600 : 400 }}
+                    >
+                      {lang === 'en' ? 'EN' : 'हि'}
+                    </button>
+                  ))}
+                  {isTranslating && <span className="w-3 h-3 mx-0.5 border border-violet-400 border-t-transparent rounded-full animate-spin" />}
+                </div>
+              )}
               {!embedded && (
                 <button
                   type="button"
@@ -987,7 +1236,7 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
                   className="px-3 py-1.5 bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 border border-gray-300 dark:border-white/8 rounded-lg text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white flex items-center gap-1.5 transition-all"
                   style={{ fontSize: "0.75rem" }}
                 >
-                  Manage Bot
+                  {t.manageBot}
                 </button>
               )}
               <button
@@ -996,14 +1245,14 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
                 className="px-3 py-1.5 bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 border border-gray-300 dark:border-white/8 rounded-lg text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white flex items-center gap-1.5 transition-all"
                 style={{ fontSize: "0.75rem" }}
               >
-                <RefreshCw className="w-3 h-3" /> Refresh
+                <RefreshCw className="w-3 h-3" /> {t.refresh}
               </button>
               {!embedded && (
                 <button
                   type="button"
                   onClick={() => activeConvId && handleDeleteChat(activeConvId)}
                   className="w-8 h-8 flex items-center justify-center text-gray-600 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-100 dark:hover:bg-red-400/10 rounded-lg transition-all"
-                  title="Delete Chat"
+                  title={t.deleteChat}
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
@@ -1019,17 +1268,17 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
               <div className="w-16 h-16 bg-violet-500/10 rounded-2xl flex items-center justify-center mb-4">
                 <Bot className="w-8 h-8 text-violet-400" />
               </div>
-              <h2 className="text-black dark:text-white text-xl font-bold mb-2">Welcome to Support Chat</h2>
+              <h2 className="text-black dark:text-white text-xl font-bold mb-2">{t.welcomeTitle}</h2>
               {embedded ? (
-                <p className="text-gray-600 dark:text-gray-500 max-w-xs mb-6">Preparing your support chat…</p>
+                <p className="text-gray-600 dark:text-gray-500 max-w-xs mb-6">{t.preparingChat}</p>
               ) : (
                 <>
-                  <p className="text-gray-600 dark:text-gray-500 max-w-xs mb-6">Select an existing conversation from the sidebar or start a new one to get help.</p>
+                  <p className="text-gray-600 dark:text-gray-500 max-w-xs mb-6">{t.selectConversation}</p>
                   <button
                     onClick={handleCreateChat}
                     className="px-6 py-2.5 bg-violet-500 hover:bg-violet-600 text-white rounded-xl font-semibold transition-all shadow-lg shadow-violet-500/25"
                   >
-                    Start New Chat
+                    {t.startNewChat}
                   </button>
                 </>
               )}
@@ -1041,7 +1290,7 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
                 <div className="flex items-center gap-2 bg-violet-500/10 border border-violet-500/20 rounded-full px-4 py-1.5">
                   <Sparkles className="w-3.5 h-3.5 text-violet-400" />
                   <span className="text-violet-300" style={{ fontSize: "0.75rem" }}>
-                    AI-powered support • Active Session
+                    {t.aiBanner}
                   </span>
                 </div>
               </div>
@@ -1070,7 +1319,7 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
                     {msg.role === "assistant" && msg.id === messages.filter(m => m.role === "assistant")[0]?.id && workflows.length > 0 && (
                       <div className="mt-2 w-full">
                         <p className="text-gray-700 dark:text-gray-500 mb-2" style={{ fontSize: "0.62rem", fontWeight: 700, letterSpacing: "0.06em" }}>
-                          START A WORKFLOW:
+                          {t.startWorkflow}
                         </p>
                         <div className="flex flex-wrap gap-2">
                           {workflows.map((w) => (
@@ -1080,7 +1329,9 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
                               className="px-3 py-1.5 bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 border border-gray-300 dark:border-white/10 rounded-lg text-gray-800 dark:text-gray-200 transition-all font-semibold"
                               style={{ fontSize: "0.68rem" }}
                             >
-                              {w.nodes?.find((n: any) => n.type === 'trigger')?.name || w.name}
+                              {w.nodes?.find((n: any) => n.type === 'trigger')
+                                ? (translatedDynamicUI.nodeNames[w.nodes.find((n: any) => n.type === 'trigger')!.id] || w.nodes.find((n: any) => n.type === 'trigger')!.name)
+                                : w.name}
                             </button>
                           ))}
                         </div>
@@ -1110,7 +1361,9 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
                                       className="px-5 py-2.5 bg-violet-500/5 hover:bg-violet-500/15 border border-violet-500/30 hover:border-violet-500/60 rounded-full text-violet-300 transition-all font-medium shadow-sm"
                                       style={{ fontSize: "0.82rem" }}
                                     >
-                                      {targetNode?.name || 'End Session'}
+                                      {targetNode
+                                        ? (translatedDynamicUI.nodeNames[targetNode.id] || targetNode.name)
+                                        : t.endSession}
                                     </button>
                                   );
                                 })}
@@ -1150,7 +1403,7 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
         {/* Dynamic Quick Access - FAQs ONLY */}
         {faqs.length > 0 && (
           <div className="px-6 pb-4 flex items-center gap-2 overflow-x-auto no-scrollbar flex-shrink-0 border-t border-gray-300 dark:border-white/5 pt-4">
-            <span className="text-gray-700 dark:text-gray-600 text-[0.6rem] font-black uppercase tracking-[0.2em] flex-shrink-0">Quick FAQs:</span>
+            <span className="text-gray-700 dark:text-gray-600 text-[0.6rem] font-black uppercase tracking-[0.2em] flex-shrink-0">{t.quickFaqs}</span>
             <div className="flex items-center gap-2">
               {faqs.map((f) => (
                 <button
@@ -1161,7 +1414,7 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
                   style={{ fontSize: "0.72rem" }}
                 >
                   <HelpCircle className="w-3 h-3 text-gray-600 dark:text-gray-500" />
-                  {f.question}
+                  {translatedDynamicUI.faqQuestions[f.id] || f.question}
                 </button>
               ))}
             </div>
@@ -1222,7 +1475,7 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
                     handleSend();
                   }
                 }}
-                placeholder="Type a message... (Enter to send)"
+                placeholder={t.messagePlaceholder}
                 rows={1}
                 className="flex-1 bg-transparent text-gray-800 dark:text-gray-200 placeholder-gray-700 dark:placeholder-gray-600 focus:outline-none resize-none"
                 style={{ fontSize: "0.875rem", lineHeight: 1.5, minHeight: "24px", maxHeight: "120px" }}
@@ -1231,7 +1484,7 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  title="Upload PDF to knowledge base"
+                  title={t.uploadPdf}
                   disabled={pdfStatus === 'uploading'}
                   className="text-gray-600 dark:text-gray-600 hover:text-violet-400 dark:hover:text-violet-400 transition-colors disabled:opacity-40"
                 >
@@ -1240,7 +1493,7 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
                 <button
                   type="button"
                   onClick={handleVoiceToggle}
-                  title={isRecording ? "Stop recording" : "Voice input"}
+                  title={isRecording ? t.stopRecording : t.voiceInput}
                   className={`transition-colors ${isRecording ? 'text-red-400 animate-pulse' : 'text-gray-600 dark:text-gray-600 hover:text-violet-400 dark:hover:text-violet-400'}`}
                 >
                   {isRecording ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}

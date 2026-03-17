@@ -44,7 +44,7 @@ const RAG_MATCH_COUNT = getEnvInt('RAG_MATCH_COUNT', 6);
 const RAG_NEIGHBOR_WINDOW = getEnvInt('RAG_NEIGHBOR_WINDOW', 1);
 const RAG_MAX_CONTEXT_CHARS = getEnvInt('RAG_MAX_CONTEXT_CHARS', 4500);
 const CHAT_HISTORY_LIMIT = getEnvInt('CHAT_HISTORY_LIMIT', 3);
-const AI_MAX_OUTPUT_TOKENS = getEnvInt('AI_MAX_OUTPUT_TOKENS', 512);
+const AI_MAX_OUTPUT_TOKENS = getEnvInt('AI_MAX_OUTPUT_TOKENS', 1024);
 
 // Groq LLM client
 const groq = process.env.GROQ_API_KEY
@@ -565,7 +565,7 @@ async function retrieveRelevantChunks(chatbotId: string, message: string, conver
     match_chatbot_id: chatbotId,
     match_conversation_id: conversationId || null,
     match_count: RAG_MATCH_COUNT,
-    match_threshold: 0.1
+    match_threshold: 0.2
   });
   if (rpcError) throw new Error(rpcError.message);
   return (chunks || []) as any[];
@@ -646,10 +646,45 @@ app.get('/health', (req: Request, res: Response) => {
   });
 });
 
+// Translation endpoint — batch-translates assistant messages to Gujarati or Hindi
+app.post('/api/translate', async (req: Request, res: Response) => {
+  try {
+    const { texts, language } = req.body;
+    if (!Array.isArray(texts) || texts.length === 0 || !language) {
+      return res.status(400).json({ error: 'texts array and language are required' });
+    }
+    if (language === 'en') {
+      return res.json({ translated: texts });
+    }
+
+    const langName = 'Hindi (हिंदी)';
+    const numbered = texts.map((t: string, i: number) => `[${i}]\n${t}`).join('\n\n');
+
+    const result = await createChatCompletion([
+      {
+        role: 'system',
+        content: `You are a translator. Translate each numbered segment below into ${langName}. Keep the [n] prefix exactly as-is on its own line before each translation. Return ONLY the numbered translations in the same format, nothing else.`
+      },
+      { role: 'user', content: numbered }
+    ], false);
+
+    const translated = texts.map((original: string, i: number) => {
+      const regex = new RegExp(`\\[${i}\\][\\s\\S]*?(?=\\n\\n\\[${i + 1}\\]|$)`);
+      const block = result.response.match(regex)?.[0] || '';
+      const text = block.replace(/^\[\d+\]\s*/, '').trim();
+      return text || original;
+    });
+
+    res.json({ translated });
+  } catch {
+    res.status(500).json({ error: 'Translation failed' });
+  }
+});
+
 // Chat completion endpoint (with rate limiting)
 app.post('/api/chat', rateLimitMiddleware, async (req: Request, res: Response) => {
   try {
-    const { message, chatbotContext, conversationHistory, userName, chatbotId, conversationId } = req.body;
+    const { message, chatbotContext, conversationHistory, userName, chatbotId, conversationId, language } = req.body;
 
     if (!message) {
       return res.status(400).json({ error: 'Message is required' });
@@ -658,13 +693,14 @@ app.post('/api/chat', rateLimitMiddleware, async (req: Request, res: Response) =
     // Build system prompt with chatbot context and user name
     let systemPrompt = `You are ${chatbotContext?.name || 'a helpful AI assistant'}. ${
       chatbotContext?.description ? chatbotContext.description + '. ' : ''
-    }You provide helpful, accurate, and friendly responses. Keep your answers concise and relevant. Prioritize completeness of the main answer over extra detail. If the user asks for a plan, routine, list, schedule, or set of items, include all important item names first, then add brief details only if space allows.`;
+    }You provide helpful, accurate, and complete responses. Always give a full, thorough answer — do not cut answers short. If the user asks for a plan, routine, list, schedule, or set of items, include every item name along with its key details.`;
     
     // Add personalization instruction if user name is available
     if (userName && userName.trim()) {
       const firstName = userName.trim().split(' ')[0]; // Get first name
       systemPrompt += ` When appropriate, address the user by their name: ${firstName}. Use their name naturally in conversation, especially in greetings and when emphasizing points.`;
     }
+
 
     // ── RAG: retrieve relevant knowledge base chunks ─────────────────────────
     let ragContextFound = false;
@@ -676,7 +712,7 @@ app.post('/api/chat', rateLimitMiddleware, async (req: Request, res: Response) =
           match_chatbot_id: chatbotId,
           match_conversation_id: conversationId || null,
           match_count: RAG_MATCH_COUNT,
-          match_threshold: 0.1
+          match_threshold: 0.2
         });
 
         if (rpcError) {
@@ -739,7 +775,7 @@ app.post('/api/chat', rateLimitMiddleware, async (req: Request, res: Response) =
             match_threshold: 0.0
           });
           const scores = topChunks ? (topChunks as any[]).map((c: any) => c.similarity?.toFixed(3)).join(', ') : 'none';
-          console.log(`RAG: no chunks passed threshold 0.1 for chatbot ${chatbotId}. Top scores: [${scores}]`);
+          console.log(`RAG: no chunks passed threshold 0.2 for chatbot ${chatbotId}. Top scores: [${scores}]`);
         }
       } catch (ragErr) {
         console.warn('RAG retrieval skipped:', (ragErr as any)?.message);
@@ -1353,7 +1389,7 @@ app.patch('/api/knowledge/website/source/:sourceId', async (req: Request, res: R
   }
 });
 
-// Delete all indexed website sources for a chatbot (and cascade all chunks)
+// Delete all indexed website sources for a chatbot and explicitly remove chunks.
 app.delete('/api/knowledge/website/chatbot/:chatbotId', async (req: Request, res: Response) => {
   try {
     if (!supabaseAdmin) return res.status(503).json({ error: 'Supabase not configured' });
@@ -1377,6 +1413,17 @@ app.delete('/api/knowledge/website/chatbot/:chatbotId', async (req: Request, res
     if (!websiteSources || websiteSources.length === 0) {
       return res.json({ success: true, deletedSources: 0 });
     }
+
+    const websiteSourceIds = websiteSources.map((source) => source.id).filter(Boolean);
+
+    // Explicitly delete website chunks first so cleanup works even if FK cascade
+    // is missing or was created without ON DELETE CASCADE in older databases.
+    const { error: chunkDeleteError } = await supabaseAdmin
+      .from('document_chunks')
+      .delete()
+      .eq('chatbot_id', chatbotId)
+      .in('source_id', websiteSourceIds);
+    if (chunkDeleteError) throw chunkDeleteError;
 
     const { error: deleteError } = await supabaseAdmin
       .from('chatbot_knowledge_sources')

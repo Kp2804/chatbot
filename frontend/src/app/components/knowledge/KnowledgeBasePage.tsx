@@ -313,7 +313,7 @@ export function KnowledgeBasePage() {
   const handleClearWebsiteMemory = async () => {
     if (!chatbotId) return;
     const confirmed = window.confirm(
-      "Clear all indexed website data for this chatbot? This removes every indexed page and all related chunks."
+      "Clear all indexed website data for this chatbot? This removes only website-indexed pages and their chunks. Uploaded PDFs are not deleted."
     );
     if (!confirmed) return;
 
@@ -616,11 +616,11 @@ export function KnowledgeBasePage() {
                   {indexing === "running" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
                   {indexing === "running" ? "Indexing…" : "Start Indexing"}
                 </button>
-                <p className="text-gray-500 text-xs">
-                  {websiteLock.hasConflict
-                    ? `Locked to ${websiteLock.activeHost}. Clear website memory to index another site.`
-                    : "We’ll only index for this chatbot. You can reindex or remove later."}
-                </p>
+                {websiteLock.hasConflict ? (
+                  <p className="text-gray-500 text-xs">
+                    {`Locked to ${websiteLock.activeHost}. Clear website memory to index another site.`}
+                  </p>
+                ) : null}
               </div>
             </div>
 
