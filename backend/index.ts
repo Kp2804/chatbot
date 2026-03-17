@@ -339,6 +339,15 @@ function normalizePageUrl(rawUrl: string, ignoreQueryParams: boolean) {
   return parsed.toString();
 }
 
+function getNormalizedHostname(rawUrl: string) {
+  const parsed = new URL(rawUrl);
+  return parsed.hostname.replace(/^www\./i, '').toLowerCase();
+}
+
+function isSameWebsiteHost(hostA: string, hostB: string) {
+  return hostA === hostB || hostA.endsWith(`.${hostB}`) || hostB.endsWith(`.${hostA}`);
+}
+
 function shouldIncludeUrl(rawUrl: string, rootUrl: URL, scope: WebsiteScope, rules: WebsiteCrawlRules) {
   const candidate = new URL(rawUrl);
   const sameHost = candidate.hostname === rootUrl.hostname;
@@ -928,7 +937,7 @@ app.get('/api/knowledge/:chatbotId', async (req: Request, res: Response) => {
   try {
     if (!supabaseAdmin) return res.status(503).json({ error: 'Supabase not configured' });
 
-    const { chatbotId } = req.params;
+    const chatbotId = Array.isArray(req.params.chatbotId) ? req.params.chatbotId[0] : req.params.chatbotId;
 
     const user = await requireAuth(req, res);
     if (!user) return;
@@ -989,16 +998,42 @@ app.post('/api/knowledge/website/index', async (req: Request, res: Response) => 
     const owns = await requireChatbotOwner(user.id, chatbotId, res);
     if (!owns) return;
 
+    const { data: existingSources } = await supabaseAdmin
+      .from('chatbot_knowledge_sources')
+      .select('id, content, metadata')
+      .eq('chatbot_id', chatbotId)
+      .eq('source_type', 'website');
+
+    let requestedHost = '';
+    try {
+      requestedHost = getNormalizedHostname(url);
+    } catch {
+      return res.status(400).json({ error: 'Invalid website URL' });
+    }
+
+    const existingHosts = new Set<string>();
+    for (const row of existingSources || []) {
+      const candidateUrl = row.content || row.metadata?.url;
+      if (!candidateUrl) continue;
+      try {
+        existingHosts.add(getNormalizedHostname(candidateUrl));
+      } catch {
+        // Ignore malformed legacy source URL values.
+      }
+    }
+
+    const hasConflictingWebsite = Array.from(existingHosts).some((host) => !isSameWebsiteHost(host, requestedHost));
+    if (hasConflictingWebsite) {
+      const existingWebsite = Array.from(existingHosts)[0];
+      return res.status(409).json({
+        error: `Only one indexed website is allowed per chatbot. This chatbot currently stores website data for "${existingWebsite}". Clear existing website memory first.`
+      });
+    }
+
     const normalizedRules = normalizeWebsiteRules(rules);
     const preview = await crawlWebsitePreview({ chatbotId, url, scope, rules: normalizedRules } as any);
     const selectedPages = preview.pages.filter((page) => page.status === 'ready');
     const failedPages = preview.pages.filter((page) => page.status === 'failed').length;
-
-    const { data: existingSources } = await supabaseAdmin
-      .from('chatbot_knowledge_sources')
-      .select('id, content')
-      .eq('chatbot_id', chatbotId)
-      .eq('source_type', 'website');
 
     const existingByUrl = new Map<string, { id: string; content: string | null }>();
     for (const row of existingSources || []) {
@@ -1315,6 +1350,44 @@ app.patch('/api/knowledge/website/source/:sourceId', async (req: Request, res: R
     res.json(updated);
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Update failed' });
+  }
+});
+
+// Delete all indexed website sources for a chatbot (and cascade all chunks)
+app.delete('/api/knowledge/website/chatbot/:chatbotId', async (req: Request, res: Response) => {
+  try {
+    if (!supabaseAdmin) return res.status(503).json({ error: 'Supabase not configured' });
+
+    const chatbotId = Array.isArray(req.params.chatbotId) ? req.params.chatbotId[0] : req.params.chatbotId;
+    if (!chatbotId) return res.status(400).json({ error: 'Missing chatbot id' });
+
+    const user = await requireAuth(req, res);
+    if (!user) return;
+
+    const owns = await requireChatbotOwner(user.id, chatbotId, res);
+    if (!owns) return;
+
+    const { data: websiteSources, error: fetchError } = await supabaseAdmin
+      .from('chatbot_knowledge_sources')
+      .select('id')
+      .eq('chatbot_id', chatbotId)
+      .eq('source_type', 'website');
+    if (fetchError) throw fetchError;
+
+    if (!websiteSources || websiteSources.length === 0) {
+      return res.json({ success: true, deletedSources: 0 });
+    }
+
+    const { error: deleteError } = await supabaseAdmin
+      .from('chatbot_knowledge_sources')
+      .delete()
+      .eq('chatbot_id', chatbotId)
+      .eq('source_type', 'website');
+    if (deleteError) throw deleteError;
+
+    res.json({ success: true, deletedSources: websiteSources.length });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to clear website memory' });
   }
 });
 

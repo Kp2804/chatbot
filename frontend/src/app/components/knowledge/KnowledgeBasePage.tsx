@@ -156,6 +156,15 @@ export function KnowledgeBasePage() {
   const [testQuestion, setTestQuestion] = useState("What does the website say about pricing?");
   const [testAnswer, setTestAnswer] = useState<TestResponse | null>(null);
   const [testing, setTesting] = useState(false);
+  const [clearingWebsiteMemory, setClearingWebsiteMemory] = useState(false);
+
+  const readJsonSafely = async (res: Response) => {
+    try {
+      return await res.json();
+    } catch {
+      return null;
+    }
+  };
 
   useEffect(() => {
     const activeId = localStorage.getItem("activeChatbotId");
@@ -205,8 +214,8 @@ export function KnowledgeBasePage() {
         },
         body: JSON.stringify({ chatbotId, url: url.trim(), scope, rules }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Preview failed");
+      const data = await readJsonSafely(res);
+      if (!res.ok) throw new Error(data?.error || "Preview failed");
       setPreview(data);
     } catch (err: any) {
       setError(err.message || "Preview failed");
@@ -218,6 +227,12 @@ export function KnowledgeBasePage() {
 
   const handleIndex = async () => {
     if (!chatbotId || !url.trim()) return;
+    if (websiteLock.activeHost && websiteLock.requestedHost && websiteLock.hasConflict) {
+      setError(
+        `This chatbot already has indexed website memory for "${websiteLock.activeHost}". Clear existing website memory before indexing another website.`
+      );
+      return;
+    }
     setError(null);
     setIndexing("running");
     setStagePointer(0);
@@ -236,8 +251,8 @@ export function KnowledgeBasePage() {
         },
         body: JSON.stringify({ chatbotId, url: url.trim(), scope, rules }),
       });
-      const data: IndexResponse = await res.json();
-      if (!res.ok || !data.success) throw new Error((data as any).error || "Indexing failed");
+      const data = (await readJsonSafely(res)) as IndexResponse | null;
+      if (!res.ok || !data?.success) throw new Error((data as any)?.error || "Indexing failed");
 
       setSummary(data.summary);
       setPreview((prevPreview) =>
@@ -267,7 +282,8 @@ export function KnowledgeBasePage() {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (!res.ok) throw new Error("Failed to load sources");
-      const data: KnowledgeSource[] = await res.json();
+      const data = (await readJsonSafely(res)) as KnowledgeSource[] | null;
+      if (!Array.isArray(data)) throw new Error("Failed to parse sources");
       setSources(data);
     } catch (err: any) {
       setError(err.message);
@@ -288,8 +304,55 @@ export function KnowledgeBasePage() {
       });
       if (!res.ok) throw new Error("Delete failed");
       setSources((prev) => prev.filter((s) => s.id !== sourceId));
+      setSummary(null);
     } catch (err: any) {
       setError(err.message);
+    }
+  };
+
+  const handleClearWebsiteMemory = async () => {
+    if (!chatbotId) return;
+    const confirmed = window.confirm(
+      "Clear all indexed website data for this chatbot? This removes every indexed page and all related chunks."
+    );
+    if (!confirmed) return;
+
+    setClearingWebsiteMemory(true);
+    setError(null);
+    try {
+      const token = await getAccessToken();
+      const res = await fetch(`${backendUrl}/api/knowledge/website/chatbot/${chatbotId}`, {
+        method: "DELETE",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      const data = await readJsonSafely(res);
+      if (!res.ok) {
+        // Backward-compatible fallback: if route is missing, delete each website source.
+        if (res.status === 404 || res.status === 405) {
+          for (const source of websiteSources) {
+            const delRes = await fetch(`${backendUrl}/api/knowledge/source/${source.id}`, {
+              method: "DELETE",
+              headers: token ? { Authorization: `Bearer ${token}` } : {},
+            });
+            if (!delRes.ok) {
+              const delData = await readJsonSafely(delRes);
+              throw new Error(delData?.error || "Failed to clear website memory");
+            }
+          }
+        } else {
+          throw new Error(data?.error || "Failed to clear website memory. Please restart backend and try again.");
+        }
+      }
+
+      setSources((prev) => prev.filter((s) => s.source_type !== "website"));
+      setSummary(null);
+      setPreview(null);
+      setIndexing("idle");
+      setStagePointer(0);
+    } catch (err: any) {
+      setError(err.message || "Failed to clear website memory");
+    } finally {
+      setClearingWebsiteMemory(false);
     }
   };
 
@@ -300,7 +363,7 @@ export function KnowledgeBasePage() {
         method: "POST",
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
-      const data = await res.json();
+      const data = await readJsonSafely(res);
       if (!res.ok) throw new Error(data.error || "Reindex failed");
       fetchSources(chatbotId!);
     } catch (err: any) {
@@ -319,7 +382,7 @@ export function KnowledgeBasePage() {
         },
         body: JSON.stringify({ priority: !current }),
       });
-      const data = await res.json();
+      const data = await readJsonSafely(res);
       if (!res.ok) throw new Error(data.error || "Update failed");
       setSources((prev) => prev.map((s) => (s.id === sourceId ? { ...s, priority: !current, metadata: { ...(s.metadata || {}), priority: !current } } : s)));
     } catch (err: any) {
@@ -342,8 +405,8 @@ export function KnowledgeBasePage() {
         },
         body: JSON.stringify({ chatbotId, question: testQuestion.trim() }),
       });
-      const data: TestResponse = await res.json();
-      if (!res.ok) throw new Error((data as any).error || "Test failed");
+      const data = (await readJsonSafely(res)) as TestResponse | null;
+      if (!res.ok || !data) throw new Error((data as any)?.error || "Test failed");
       setTestAnswer(data);
     } catch (err: any) {
       setError(err.message || "Test failed");
@@ -376,8 +439,8 @@ export function KnowledgeBasePage() {
         body: formData,
       });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Upload failed");
+      const data = await readJsonSafely(res);
+      if (!res.ok) throw new Error(data?.error || "Upload failed");
 
       setUploadStatus("done");
       setUploadMessage(`"${data.title}" added — ${data.chunkCount} chunks indexed.`);
@@ -415,6 +478,24 @@ export function KnowledgeBasePage() {
 
   const websiteSources = sources.filter((s) => s.source_type === "website");
   const pdfSources = sources.filter((s) => s.source_type === "pdf");
+  const websiteLock = useMemo(() => {
+    const normalizeHost = (raw?: string | null) => {
+      if (!raw) return null;
+      try {
+        const parsed = new URL(raw);
+        return parsed.hostname.replace(/^www\./i, "").toLowerCase();
+      } catch {
+        return null;
+      }
+    };
+    const isSameWebsiteHost = (a: string, b: string) => a === b || a.endsWith(`.${b}`) || b.endsWith(`.${a}`);
+
+    const activeHost = normalizeHost(websiteSources[0]?.content || websiteSources[0]?.metadata?.url) || null;
+    const requestedHost = normalizeHost(url.trim()) || null;
+    const hasConflict = !!activeHost && !!requestedHost && !isSameWebsiteHost(activeHost, requestedHost);
+
+    return { activeHost, requestedHost, hasConflict };
+  }, [websiteSources, url]);
 
   return (
     <div className="h-full overflow-y-auto bg-[#08080c]">
@@ -529,13 +610,17 @@ export function KnowledgeBasePage() {
                 <button
                   type="button"
                   onClick={handleIndex}
-                  disabled={indexing === "running" || !url.trim()}
+                  disabled={indexing === "running" || !url.trim() || websiteLock.hasConflict}
                   className="px-5 py-2.5 bg-gradient-to-r from-violet-500 to-indigo-600 hover:from-violet-600 hover:to-indigo-700 text-white rounded-xl transition-all flex items-center gap-2 disabled:opacity-60"
                 >
                   {indexing === "running" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
                   {indexing === "running" ? "Indexing…" : "Start Indexing"}
                 </button>
-                <p className="text-gray-500 text-xs">We’ll only index for this chatbot. You can reindex or remove later.</p>
+                <p className="text-gray-500 text-xs">
+                  {websiteLock.hasConflict
+                    ? `Locked to ${websiteLock.activeHost}. Clear website memory to index another site.`
+                    : "We’ll only index for this chatbot. You can reindex or remove later."}
+                </p>
               </div>
             </div>
 
@@ -703,7 +788,19 @@ export function KnowledgeBasePage() {
                 <div className="flex items-center gap-2 text-white font-semibold">
                   <ShieldCheck className="w-4 h-4 text-violet-300" /> Indexed website pages
                 </div>
-                <span className="text-xs text-gray-500">Per-chatbot isolation is enforced.</span>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-gray-500">Per-chatbot isolation is enforced.</span>
+                  <button
+                    type="button"
+                    onClick={handleClearWebsiteMemory}
+                    disabled={clearingWebsiteMemory || websiteSources.length === 0}
+                    className="px-3 py-1.5 rounded-lg border border-red-500/30 text-red-200 hover:bg-red-500/10 disabled:opacity-60 disabled:cursor-not-allowed text-xs font-semibold flex items-center gap-2"
+                    title="Clear all indexed website pages and chunks"
+                  >
+                    {clearingWebsiteMemory ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                    Clear website memory
+                  </button>
+                </div>
               </div>
 
               {sourcesLoading ? (
