@@ -4,7 +4,7 @@ import {
   Send, Bot, Plus, Search,
   Smile, ThumbsUp, ThumbsDown, Copy, RefreshCw,
   Sparkles, Clock, Check, Star, Trash2, HelpCircle,
-  ArrowRight, Layout, Mic, MicOff, Paperclip, FileText
+  ArrowRight, Layout, Mic, MicOff, Paperclip, FileText, ChevronUp
 } from "lucide-react";
 import EmojiPicker, { EmojiClickData } from "emoji-picker-react";
 import { supabase, getAccessToken } from "../../../lib/supabase";
@@ -182,6 +182,7 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
   const [isTyping, setIsTyping] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [faqs, setFaqs] = useState<FAQ[]>([]);
+  const [showAllFaqs, setShowAllFaqs] = useState(false);
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [activeWorkflow, setActiveWorkflow] = useState<Workflow | null>(null);
   const [currentStepId, setCurrentStepId] = useState<string | null>(null);
@@ -220,6 +221,10 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
   useEffect(() => {
     document.title = t('chat.pageTitle');
   }, [language, t]);
+
+  useEffect(() => {
+    setShowAllFaqs(faqs.length <= 5);
+  }, [faqs]);
 
   const trackOriginalMessages = (list: Message[]) => {
     for (const msg of list) {
@@ -641,8 +646,7 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
       .from('faqs')
       .select('id, question, answer')
       .eq('chatbot_id', activeChatbotId)
-      .eq('status', 'published')
-      .limit(5);
+      .eq('status', 'published');
     if (!error) setFaqs(data || []);
   };
 
@@ -1291,22 +1295,37 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
 
         {/* Dynamic Quick Access - FAQs ONLY */}
         {faqs.length > 0 && (
-          <div className="px-6 pb-4 flex items-center gap-2 overflow-x-auto no-scrollbar flex-shrink-0 border-t border-gray-300 dark:border-white/5 pt-4">
-            <span className="text-gray-700 dark:text-gray-600 text-[0.6rem] font-black uppercase tracking-[0.2em] flex-shrink-0">{t('chat.quickFaqs')}</span>
+          <div className="px-6 pb-4 flex-shrink-0 border-t border-gray-300 dark:border-white/5 pt-4">
             <div className="flex items-center gap-2">
-              {faqs.map((f) => (
+              <span className="text-gray-700 dark:text-gray-600 text-[0.6rem] font-black uppercase tracking-[0.2em] flex-shrink-0">{t('chat.quickFaqs')}</span>
+              {faqs.length > 5 && (
                 <button
-                  key={f.id}
                   type="button"
-                  onClick={() => handleFAQClick(f)}
-                  className="px-4 py-2 bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 border border-gray-300 dark:border-white/8 rounded-xl text-gray-700 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 transition-all whitespace-nowrap flex items-center gap-2"
-                  style={{ fontSize: "0.72rem" }}
+                  onClick={() => setShowAllFaqs((prev) => !prev)}
+                  className="w-6 h-6 flex items-center justify-center rounded-md bg-gray-100 dark:bg-white/5 border border-gray-300 dark:border-white/8 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 transition-all"
+                  title={showAllFaqs ? "Hide FAQs" : "Show FAQs"}
+                  aria-label={showAllFaqs ? "Hide FAQs" : "Show FAQs"}
                 >
-                  <HelpCircle className="w-3 h-3 text-gray-600 dark:text-gray-500" />
-                  {f.question}
+                  <ChevronUp className={`w-3.5 h-3.5 transition-transform ${showAllFaqs ? "rotate-180" : ""}`} />
                 </button>
-              ))}
+              )}
             </div>
+            {(showAllFaqs || faqs.length <= 5) && (
+              <div className="mt-2 flex items-center gap-2 overflow-x-auto no-scrollbar">
+                {faqs.map((f) => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => handleFAQClick(f)}
+                    className="px-4 py-2 bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 border border-gray-300 dark:border-white/8 rounded-xl text-gray-700 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 transition-all whitespace-nowrap flex items-center gap-2"
+                    style={{ fontSize: "0.72rem" }}
+                  >
+                    <HelpCircle className="w-3 h-3 text-gray-600 dark:text-gray-500" />
+                    {f.question}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
