@@ -15,13 +15,13 @@ body,
 /* Light mode (default) */
 html {
   background-color: #ffffff;
-  color: #030213;
+  color: #052e1b;
 }
 
 /* Dark mode */
 html.dark {
-  background-color: #0f0f13;
-  color: #ffffff;
+  background-color: #08080c;
+  color: #ede9fe;
 }
 
 #root {

@@ -56,7 +56,7 @@ export function AuthPage() {
   };
 
   return (
-    <div className="w-full h-screen flex bg-[#0f0f13] dark">
+    <div className="w-full h-screen flex bg-white dark:bg-[#08080c]">
       {/* Left Panel */}
       <div className="hidden lg:flex w-1/2 relative overflow-hidden flex-col items-center justify-center p-12">
         {/* Gradient Background */}

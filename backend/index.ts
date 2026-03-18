@@ -29,7 +29,10 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 // AI provider configuration
+// Groq is primary; Ollama is used as fallback when Groq fails.
+// Set AI_PROVIDER=ollama-only to force local inference.
 const AI_PROVIDER = (process.env.AI_PROVIDER || 'groq').toLowerCase();
+const OLLAMA_FALLBACK_ENABLED = (process.env.OLLAMA_FALLBACK_ENABLED || 'true').toLowerCase() !== 'false';
 
 // Ollama configuration (used only when provider = ollama)
 const OLLAMA_BASE_URL = (process.env.OLLAMA_BASE_URL || 'http://localhost:11434').replace(/\/$/, '');
@@ -41,12 +44,22 @@ function getEnvInt(name: string, fallback: number) {
   return Number.isFinite(value) && value > 0 ? value : fallback;
 }
 
+function getEnvFloat(name: string, fallback: number, min = 0, max = 1) {
+  const value = Number.parseFloat(process.env[name] || '');
+  if (!Number.isFinite(value)) return fallback;
+  if (value < min || value > max) return fallback;
+  return value;
+}
+
 //RAG Configuration
 const RAG_MATCH_COUNT = getEnvInt('RAG_MATCH_COUNT', 6);
 const RAG_NEIGHBOR_WINDOW = getEnvInt('RAG_NEIGHBOR_WINDOW', 1);
 const RAG_MAX_CONTEXT_CHARS = getEnvInt('RAG_MAX_CONTEXT_CHARS', 4500);
+const RAG_MATCH_THRESHOLD = getEnvFloat('RAG_MATCH_THRESHOLD', 0.05);
+const RAG_FALLBACK_MIN_SIMILARITY = getEnvFloat('RAG_FALLBACK_MIN_SIMILARITY', 0.02);
+const RAG_FALLBACK_MATCH_COUNT = getEnvInt('RAG_FALLBACK_MATCH_COUNT', RAG_MATCH_COUNT);
 const CHAT_HISTORY_LIMIT = getEnvInt('CHAT_HISTORY_LIMIT', 3);
-const AI_MAX_OUTPUT_TOKENS = getEnvInt('AI_MAX_OUTPUT_TOKENS', 1024);
+const AI_MAX_OUTPUT_TOKENS = getEnvInt('AI_MAX_OUTPUT_TOKENS', 512);
 
 // Groq LLM client
 const groq = process.env.GROQ_API_KEY
@@ -94,9 +107,7 @@ getEmbeddingPipeline().catch(() => {});
 
 //   LLM Completion Wrapper
 async function createChatCompletion(messages: any[], ragContextFound: boolean) {
-  
-  // Local inference via Ollama
-  if (AI_PROVIDER === 'ollama') {
+  const runOllama = async () => {
     const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
       method: 'POST',
       headers: {
@@ -123,27 +134,47 @@ async function createChatCompletion(messages: any[], ragContextFound: boolean) {
       model: data?.model || OLLAMA_MODEL,
       tokensUsed: data?.prompt_eval_count || 0
     };
-  }
-
-  // Hosted inference via Groq
-  if (!groq) {
-    throw new Error('GROQ_API_KEY is missing and AI_PROVIDER is not set to ollama');
-  }
-
-  const completion = await groq.chat.completions.create({
-    messages,
-    model: 'llama-3.3-70b-versatile',
-    temperature: ragContextFound ? 0.1 : 0.7,
-    max_tokens: AI_MAX_OUTPUT_TOKENS,
-    top_p: 1,
-    stream: false
-  });
-
-  return {
-    response: completion.choices[0]?.message?.content || "I'm sorry, I couldn't generate a response. Please try again.",
-    model: completion.model,
-    tokensUsed: completion.usage?.total_tokens || 0
   };
+
+  const runGroq = async () => {
+    if (!groq) {
+      throw new Error('GROQ_API_KEY is missing');
+    }
+
+    const completion = await groq.chat.completions.create({
+      messages,
+      model: 'llama-3.3-70b-versatile',
+      temperature: ragContextFound ? 0.1 : 0.7,
+      max_tokens: AI_MAX_OUTPUT_TOKENS,
+      top_p: 1,
+      stream: false
+    });
+
+    return {
+      response: completion.choices[0]?.message?.content || "I'm sorry, I couldn't generate a response. Please try again.",
+      model: completion.model,
+      tokensUsed: completion.usage?.total_tokens || 0
+    };
+  };
+
+  // Respect explicit ollama-only mode for local/dev usage.
+  if (AI_PROVIDER === 'ollama-only') {
+    return runOllama();
+  }
+
+  // Default behavior: Groq first, then Ollama only if Groq fails.
+  try {
+    return await runGroq();
+  } catch (groqError: any) {
+    const groqMessage = groqError?.message || 'Unknown Groq error';
+
+    if (!OLLAMA_FALLBACK_ENABLED) {
+      throw new Error(`Groq request failed and Ollama fallback is disabled: ${groqMessage}`);
+    }
+
+    console.warn(`Groq request failed; falling back to Ollama. Reason: ${groqMessage}`);
+    return runOllama();
+  }
 }
 
 /**
@@ -202,6 +233,7 @@ function chunkText(text: string, chunkSize = 400, overlap = 80): string[] {
     t.length > 0 && t.length < 80 &&
     !t.endsWith('.') && !t.endsWith(',') && !t.endsWith(':') &&
     (/^(DAY|WEEK|PHASE|SECTION|CHAPTER|PART|MODULE|STEP|STAGE)\b/i.test(t) ||
+     /^(MONDAY|TUESDAY|WEDNESDAY|THURSDAY|FRIDAY|SATURDAY|SUNDAY)\b/i.test(t) ||
      (t === t.toUpperCase() && /[A-Z]/.test(t)));
 
   // A table row: line with 3+ consecutive spaces (column alignment)
@@ -560,17 +592,55 @@ async function deleteKnowledgeSourceChunks(sourceId: string) {
   if (error) throw error;
 }
 
-async function retrieveRelevantChunks(chatbotId: string, message: string, conversationId?: string | null) {
-  const queryEmbedding = await embedText(message);
+async function matchDocumentChunks(
+  chatbotId: string,
+  queryEmbedding: number[],
+  conversationId: string | null | undefined,
+  threshold: number,
+  count: number
+) {
   const { data: chunks, error: rpcError } = await supabaseAdmin!.rpc('match_document_chunks', {
     query_embedding: queryEmbedding,
     match_chatbot_id: chatbotId,
     match_conversation_id: conversationId || null,
-    match_count: RAG_MATCH_COUNT,
-    match_threshold: 0.2
+    match_count: count,
+    match_threshold: threshold
   });
+
   if (rpcError) throw new Error(rpcError.message);
   return (chunks || []) as any[];
+}
+
+function filterChunksBySimilarity(chunks: any[], minSimilarity: number, maxCount: number) {
+  return chunks
+    .filter((chunk) => Number(chunk?.similarity) >= minSimilarity)
+    .sort((a, b) => Number(b?.similarity || 0) - Number(a?.similarity || 0))
+    .slice(0, maxCount);
+}
+
+async function retrieveRelevantChunks(chatbotId: string, message: string, conversationId?: string | null) {
+  const queryEmbedding = await embedText(message);
+  const strictChunks = await matchDocumentChunks(
+    chatbotId,
+    queryEmbedding,
+    conversationId,
+    RAG_MATCH_THRESHOLD,
+    RAG_MATCH_COUNT
+  );
+
+  if (strictChunks.length > 0) {
+    return strictChunks;
+  }
+
+  const topChunks = await matchDocumentChunks(
+    chatbotId,
+    queryEmbedding,
+    conversationId,
+    0,
+    Math.max(RAG_MATCH_COUNT, RAG_FALLBACK_MATCH_COUNT)
+  );
+
+  return filterChunksBySimilarity(topChunks, RAG_FALLBACK_MIN_SIMILARITY, RAG_FALLBACK_MATCH_COUNT);
 }
 
 // Rate limiting: 50 messages per user per day
@@ -687,7 +757,7 @@ app.post('/api/chat', rateLimitMiddleware, async (req: Request, res: Response) =
     // Build system prompt with chatbot context and user name
     let systemPrompt = `You are ${chatbotContext?.name || 'a helpful AI assistant'}. ${
       chatbotContext?.description ? chatbotContext.description + '. ' : ''
-    }You provide helpful, accurate, and complete responses. Always give a full, thorough answer — do not cut answers short. If the user asks for a plan, routine, list, schedule, or set of items, include every item name along with its key details.`;
+    }You provide helpful, accurate, and friendly responses. Keep your answers concise and relevant. Prioritize completeness of the main answer over extra detail. If the user asks for a plan, routine, list, schedule, or set of items, include all important item names first, then add brief details only if space allows.`;
     
     // Add personalization instruction if user name is available
     if (userName && userName.trim()) {
@@ -695,24 +765,56 @@ app.post('/api/chat', rateLimitMiddleware, async (req: Request, res: Response) =
       systemPrompt += ` When appropriate, address the user by their name: ${firstName}. Use their name naturally in conversation, especially in greetings and when emphasizing points.`;
     }
 
-
     // ── RAG: retrieve relevant knowledge base chunks ─────────────────────────
     let ragContextFound = false;
     if (chatbotId && supabaseAdmin) {
       try {
         const queryEmbedding = await embedText(englishMessage);
-        const { data: chunks, error: rpcError } = await supabaseAdmin.rpc('match_document_chunks', {
-          query_embedding: queryEmbedding,
-          match_chatbot_id: chatbotId,
-          match_conversation_id: conversationId || null,
-          match_count: RAG_MATCH_COUNT,
-          match_threshold: 0.2
-        });
+        let chunks = await matchDocumentChunks(
+          chatbotId,
+          queryEmbedding,
+          conversationId || null,
+          RAG_MATCH_THRESHOLD,
+          RAG_MATCH_COUNT
+        );
 
-        if (rpcError) {
-          console.warn('RAG RPC error:', rpcError.message);
-        } else if (chunks && chunks.length > 0) {
+        let usedFallback = false;
+        if (chunks.length === 0) {
+          const topChunks = await matchDocumentChunks(
+            chatbotId,
+            queryEmbedding,
+            conversationId || null,
+            0,
+            Math.max(RAG_MATCH_COUNT, RAG_FALLBACK_MATCH_COUNT)
+          );
+
+          const fallbackChunks = filterChunksBySimilarity(
+            topChunks,
+            RAG_FALLBACK_MIN_SIMILARITY,
+            RAG_FALLBACK_MATCH_COUNT
+          );
+
+          if (fallbackChunks.length > 0) {
+            chunks = fallbackChunks;
+            usedFallback = true;
+          } else {
+            const scores = topChunks.length > 0
+              ? topChunks.map((c: any) => Number(c.similarity || 0).toFixed(3)).join(', ')
+              : 'none';
+            console.log(
+              `RAG: no chunks passed threshold ${RAG_MATCH_THRESHOLD} for chatbot ${chatbotId}. ` +
+              `Top scores: [${scores}], fallback floor: ${RAG_FALLBACK_MIN_SIMILARITY}`
+            );
+          }
+        }
+
+        if (chunks.length > 0) {
           ragContextFound = true;
+          if (usedFallback) {
+            console.log(
+              `RAG fallback: using ${chunks.length} chunk(s) above similarity ${RAG_FALLBACK_MIN_SIMILARITY} for chatbot ${chatbotId}`
+            );
+          }
 
           // ── Adjacent chunk expansion ──────────────────────────────────────
           // For each retrieved chunk, also fetch a small neighbour window
@@ -759,17 +861,6 @@ app.post('/api/chat', rateLimitMiddleware, async (req: Request, res: Response) =
           const ragContextResult = buildRagContext(expandedChunks, RAG_MAX_CONTEXT_CHARS);
           console.log(`RAG: ${matchedChunks.length} matched + ${expandedChunks.length - matchedChunks.length} neighbours; using ${ragContextResult.chunkCount} chunks / ${ragContextResult.usedChars} chars`);
           systemPrompt += `\n\n### Knowledge Base Context\nUse the information below to answer the user's question accurately. Base your answer on this context. You may apply simple common-sense reasoning to bridge terminology in the context to the user's question (e.g. numbered items map to natural names, abbreviations have standard meanings). Do not invent facts not supported by the context. If the answer cannot be determined even with reasonable inference, say so clearly. If the context contains an ordered or named list, preserve all primary item names in your answer even if you omit secondary fields like instructions, equipment, sets, or rest times.\n\n${ragContextResult.context}\n---`;
-        } else {
-          // Log top scores even when nothing passes threshold to help diagnose
-          const { data: topChunks } = await supabaseAdmin.rpc('match_document_chunks', {
-            query_embedding: queryEmbedding,
-            match_chatbot_id: chatbotId,
-            match_conversation_id: null,
-            match_count: 3,
-            match_threshold: 0.0
-          });
-          const scores = topChunks ? (topChunks as any[]).map((c: any) => c.similarity?.toFixed(3)).join(', ') : 'none';
-          console.log(`RAG: no chunks passed threshold 0.2 for chatbot ${chatbotId}. Top scores: [${scores}]`);
         }
       } catch (ragErr) {
         console.warn('RAG retrieval skipped:', (ragErr as any)?.message);
@@ -1502,10 +1593,11 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
 
 app.listen(PORT, () => {
   console.log(`🤖 Chatbot backend running on http://localhost:${PORT}`);
-  console.log(`✅ AI provider: ${AI_PROVIDER}`);
+  console.log(`✅ AI mode: ${AI_PROVIDER === 'ollama-only' ? 'ollama-only' : 'groq-primary'}`);
   console.log(`✅ Groq API key configured: ${!!process.env.GROQ_API_KEY}`);
-  console.log(`✅ RAG limits: matches=${RAG_MATCH_COUNT}, neighbours=${RAG_NEIGHBOR_WINDOW}, contextChars=${RAG_MAX_CONTEXT_CHARS}, history=${CHAT_HISTORY_LIMIT}, output=${AI_MAX_OUTPUT_TOKENS}`);
-  if (AI_PROVIDER === 'ollama') {
+  console.log(`✅ Ollama fallback enabled: ${OLLAMA_FALLBACK_ENABLED}`);
+  console.log(`✅ RAG limits: matches=${RAG_MATCH_COUNT}, neighbours=${RAG_NEIGHBOR_WINDOW}, contextChars=${RAG_MAX_CONTEXT_CHARS}, threshold=${RAG_MATCH_THRESHOLD}, fallbackFloor=${RAG_FALLBACK_MIN_SIMILARITY}, history=${CHAT_HISTORY_LIMIT}, output=${AI_MAX_OUTPUT_TOKENS}`);
+  if (AI_PROVIDER === 'ollama-only' || OLLAMA_FALLBACK_ENABLED) {
     console.log(`✅ Ollama endpoint: ${OLLAMA_BASE_URL}`);
     console.log(`✅ Ollama model: ${OLLAMA_MODEL}`);
   }
