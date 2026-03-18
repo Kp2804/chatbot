@@ -18,6 +18,7 @@ import {
   User,
   ChevronDown,
   BookOpen,
+  CreditCard,
 } from "lucide-react";
 import { supabase } from "../../../lib/supabase";
 
@@ -284,6 +285,22 @@ export function Layout() {
               <>
                 <Settings className={`w-[18px] h-[18px] flex-shrink-0 ${isActive ? "text-violet-400" : ""}`} />
                 {!collapsed && <span style={{ fontSize: "0.875rem", fontWeight: isActive ? 600 : 400 }}>Settings</span>}
+              </>
+            )}
+          </NavLink>
+          <NavLink
+            to="/app/pricing"
+            className={({ isActive }) =>
+              `flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all ${isActive
+                ? "bg-violet-500/15 text-violet-400 border border-violet-500/20"
+                : "text-gray-500 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-200 dark:hover:bg-white/5"
+              } ${collapsed ? "justify-center" : ""}`
+            }
+          >
+            {({ isActive }) => (
+              <>
+                <CreditCard className={`w-[18px] h-[18px] flex-shrink-0 ${isActive ? "text-violet-400" : ""}`} />
+                {!collapsed && <span style={{ fontSize: "0.875rem", fontWeight: isActive ? 600 : 400 }}>Pricing</span>}
               </>
             )}
           </NavLink>

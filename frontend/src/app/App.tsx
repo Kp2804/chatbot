@@ -14,6 +14,7 @@ import { EmbeddedChatPage } from "./components/chat/EmbeddedChatPage";
 import { ProfilePage } from "./components/profile/ProfilePage";
 import { SettingsPage } from "./components/settings/SettingsPage";
 import { KnowledgeBasePage } from "./components/knowledge/KnowledgeBasePage";
+import { PricingPage } from "./components/billing/PricingPage";
 
 const router = createBrowserRouter([
   {
@@ -43,6 +44,7 @@ const router = createBrowserRouter([
       { path: "analytics", Component: AnalyticsPage },
       { path: "knowledge", Component: KnowledgeBasePage },
       { path: "profile", Component: ProfilePage },
+      { path: "pricing", Component: PricingPage },
       { path: "settings", Component: SettingsPage },
     ],
   },
