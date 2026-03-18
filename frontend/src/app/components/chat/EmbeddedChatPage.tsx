@@ -3,8 +3,10 @@ import { useNavigate, useParams, useSearchParams } from "react-router";
 import { RefreshCw } from "lucide-react";
 import { supabase } from "../../../lib/supabase";
 import { ChatInterface } from "./ChatInterface";
+import { useTranslation } from "react-i18next";
 
 export function EmbeddedChatPage() {
+  const { t } = useTranslation();
   const { chatbotId } = useParams();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -57,7 +59,7 @@ export function EmbeddedChatPage() {
       return (
         <div className="dark" style={{ height: '100vh', background: '#0f0f13', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px', textAlign: 'center' }}>
           <div>
-            <h2 style={{ color: '#ffffff', fontSize: '1rem', fontWeight: 600, marginBottom: '8px' }}>Authorization Error</h2>
+            <h2 style={{ color: '#ffffff', fontSize: '1rem', fontWeight: 600, marginBottom: '8px' }}>{t('chat.authorizationError')}</h2>
             <p style={{ color: '#9ca3af', fontSize: '0.85rem' }}>{authError}</p>
           </div>
         </div>
@@ -67,7 +69,7 @@ export function EmbeddedChatPage() {
     return (
       <div style={{ height: '100vh', background: '#0f0f13', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
         <RefreshCw className="w-6 h-6 animate-spin" style={{ color: '#a78bfa' }} />
-        <span style={{ color: '#9ca3af', fontSize: '0.85rem' }}>Loading chat...</span>
+        <span style={{ color: '#9ca3af', fontSize: '0.85rem' }}>{t('chat.loadingChat')}</span>
       </div>
     );
   }

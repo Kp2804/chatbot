@@ -1,0 +1,37 @@
+{
+  "common": {
+    "language": "भाषा",
+    "english": "अंग्रेज़ी",
+    "hindi": "हिंदी"
+  },
+  "chat": {
+    "pageTitle": "सहायता चैट",
+    "loading": "लोड हो रहा है...",
+    "active": "सक्रिय",
+    "manageBot": "बॉट प्रबंधित करें",
+    "refresh": "रीफ्रेश करें",
+    "deleteChat": "चैट हटाएं",
+    "conversations": "बातचीत",
+    "searchPlaceholder": "चैट खोजें...",
+    "totalChats": "कुल चैट",
+    "resolved": "हल किए गए",
+    "welcomeTitle": "सहायता चैट में स्वागत है",
+    "preparingChat": "आपकी सहायता चैट तैयार हो रही है...",
+    "selectConversation": "साइडबार से कोई मौजूदा बातचीत चुनें या मदद के लिए नई बातचीत शुरू करें।",
+    "startNewChat": "नई चैट शुरू करें",
+    "aiBanner": "AI-संचालित सहायता • सक्रिय सत्र",
+    "startWorkflow": "वर्कफ़्लो शुरू करें:",
+    "endSession": "सत्र समाप्त करें",
+    "quickFaqs": "त्वरित FAQ:",
+    "messagePlaceholder": "संदेश टाइप करें... (भेजने के लिए Enter दबाएं)",
+    "uploadPdf": "ज्ञान आधार में PDF अपलोड करें",
+    "stopRecording": "रिकॉर्डिंग बंद करें",
+    "voiceInput": "वॉइस इनपुट",
+    "send": "भेजें",
+    "translatingChat": "चैट का अनुवाद हो रहा है...",
+    "newConversation": "नई बातचीत",
+    "technicalDifficulties": "तकनीकी समस्या हो रही है। कृपया फिर से कोशिश करें या जांचें कि बैकएंड सर्वर चल रहा है।",
+    "authorizationError": "प्राधिकरण त्रुटि",
+    "loadingChat": "चैट लोड हो रही है..."
+  }
+}

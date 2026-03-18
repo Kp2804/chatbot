@@ -1,0 +1,37 @@
+{
+  "common": {
+    "language": "Language",
+    "english": "English",
+    "hindi": "Hindi"
+  },
+  "chat": {
+    "pageTitle": "Support Chat",
+    "loading": "Loading...",
+    "active": "Active",
+    "manageBot": "Manage Bot",
+    "refresh": "Refresh",
+    "deleteChat": "Delete Chat",
+    "conversations": "Conversations",
+    "searchPlaceholder": "Search chats...",
+    "totalChats": "Total Chats",
+    "resolved": "Resolved",
+    "welcomeTitle": "Welcome to Support Chat",
+    "preparingChat": "Preparing your support chat...",
+    "selectConversation": "Select an existing conversation from the sidebar or start a new one to get help.",
+    "startNewChat": "Start New Chat",
+    "aiBanner": "AI-powered support • Active Session",
+    "startWorkflow": "START A WORKFLOW:",
+    "endSession": "End Session",
+    "quickFaqs": "Quick FAQs:",
+    "messagePlaceholder": "Type a message... (Enter to send)",
+    "uploadPdf": "Upload PDF to knowledge base",
+    "stopRecording": "Stop recording",
+    "voiceInput": "Voice input",
+    "send": "Send",
+    "translatingChat": "Translating chat...",
+    "newConversation": "New Conversation",
+    "technicalDifficulties": "I'm experiencing technical difficulties. Please try again or check if the backend server is running.",
+    "authorizationError": "Authorization Error",
+    "loadingChat": "Loading chat..."
+  }
+}

@@ -16,6 +16,7 @@ import multer from 'multer';
 import { createClient } from '@supabase/supabase-js';
 import { createRequire } from 'module';
 import crypto from 'crypto';
+import { translateText } from './services/translation';
 const _require = createRequire(import.meta.url);
 
 // Direct import used to bypass pdf-parse ESM startup issue
@@ -646,34 +647,21 @@ app.get('/health', (req: Request, res: Response) => {
   });
 });
 
-// Translation endpoint — batch-translates assistant messages to Gujarati or Hindi
+// Translation endpoint using LibreTranslate (non-LLM translation)
 app.post('/api/translate', async (req: Request, res: Response) => {
   try {
-    const { texts, language } = req.body;
+    const { texts, language, source = 'en' } = req.body;
     if (!Array.isArray(texts) || texts.length === 0 || !language) {
       return res.status(400).json({ error: 'texts array and language are required' });
     }
-    if (language === 'en') {
-      return res.json({ translated: texts });
+
+    if (language !== 'en' && language !== 'hi') {
+      return res.status(400).json({ error: 'language must be en or hi' });
     }
 
-    const langName = 'Hindi (हिंदी)';
-    const numbered = texts.map((t: string, i: number) => `[${i}]\n${t}`).join('\n\n');
-
-    const result = await createChatCompletion([
-      {
-        role: 'system',
-        content: `You are a translator. Translate each numbered segment below into ${langName}. Keep the [n] prefix exactly as-is on its own line before each translation. Return ONLY the numbered translations in the same format, nothing else.`
-      },
-      { role: 'user', content: numbered }
-    ], false);
-
-    const translated = texts.map((original: string, i: number) => {
-      const regex = new RegExp(`\\[${i}\\][\\s\\S]*?(?=\\n\\n\\[${i + 1}\\]|$)`);
-      const block = result.response.match(regex)?.[0] || '';
-      const text = block.replace(/^\[\d+\]\s*/, '').trim();
-      return text || original;
-    });
+    const translated = await Promise.all(
+      texts.map((text: string) => translateText(text, language, source))
+    );
 
     res.json({ translated });
   } catch {
@@ -684,11 +672,16 @@ app.post('/api/translate', async (req: Request, res: Response) => {
 // Chat completion endpoint (with rate limiting)
 app.post('/api/chat', rateLimitMiddleware, async (req: Request, res: Response) => {
   try {
-    const { message, chatbotContext, conversationHistory, userName, chatbotId, conversationId, language } = req.body;
+    const { message, chatbotContext, conversationHistory, userName, chatbotId, conversationId, lang } = req.body;
+    const selectedLang: 'en' | 'hi' = lang === 'hi' ? 'hi' : 'en';
 
     if (!message) {
       return res.status(400).json({ error: 'Message is required' });
     }
+
+    const englishMessage = selectedLang === 'hi'
+      ? await translateText(message, 'en', 'hi')
+      : message;
 
     // Build system prompt with chatbot context and user name
     let systemPrompt = `You are ${chatbotContext?.name || 'a helpful AI assistant'}. ${
@@ -706,7 +699,7 @@ app.post('/api/chat', rateLimitMiddleware, async (req: Request, res: Response) =
     let ragContextFound = false;
     if (chatbotId && supabaseAdmin) {
       try {
-        const queryEmbedding = await embedText(message);
+        const queryEmbedding = await embedText(englishMessage);
         const { data: chunks, error: rpcError } = await supabaseAdmin.rpc('match_document_chunks', {
           query_embedding: queryEmbedding,
           match_chatbot_id: chatbotId,
@@ -801,26 +794,34 @@ app.post('/api/chat', rateLimitMiddleware, async (req: Request, res: Response) =
     // Add limited conversation history so the prompt stays small.
     if (conversationHistory && Array.isArray(conversationHistory)) {
       const recentHistory = conversationHistory.slice(-CHAT_HISTORY_LIMIT);
-      recentHistory.forEach((msg: any) => {
+      for (const msg of recentHistory) {
+        const englishHistoryContent = selectedLang === 'hi'
+          ? await translateText(msg.content || '', 'en', 'hi')
+          : msg.content;
+
         messages.push({
           role: msg.role === 'assistant' ? 'assistant' : 'user',
-          content: msg.content
+          content: englishHistoryContent
         });
-      });
+      }
     }
 
     // Add current message
     messages.push({
       role: 'user',
-      content: message
+      content: englishMessage
     });
 
     const completion = await createChatCompletion(messages, ragContextFound);
+    const finalResponse = selectedLang === 'hi'
+      ? await translateText(completion.response, 'hi', 'en')
+      : completion.response;
 
     res.json({ 
-      response: completion.response,
+      response: finalResponse,
       model: completion.model,
-      tokensUsed: completion.tokensUsed
+      tokensUsed: completion.tokensUsed,
+      lang: selectedLang
     });
 
   } catch (error: any) {
