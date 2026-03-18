@@ -92,7 +92,11 @@ export function SettingsPage() {
           <span className="font-medium">Dark mode</span>
           <button
             onClick={toggleTheme}
-            className="w-10 h-10 flex items-center justify-center bg-gray-200 dark:bg-[#1e1e2e] rounded-full"
+            className={`w-10 h-10 flex items-center justify-center rounded-full ${
+              isDarkMode
+                ? "bg-gray-200 dark:bg-[#1e1e2e]"
+                : "bg-emerald-100 text-emerald-700"
+            }`}
             title={isDarkMode ? "Switch to light" : "Switch to dark"}
           >
             {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}

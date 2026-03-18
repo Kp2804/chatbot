@@ -322,14 +322,6 @@ export function FAQManager() {
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => importRef.current?.click()}
-              className="flex items-center gap-2 px-3 py-2 bg-white/5 hover:bg-white/10 border border-white/8 text-gray-400 hover:text-white rounded-xl transition-all"
-              style={{ fontSize: "0.8rem" }}
-            >
-              <Upload className="w-3.5 h-3.5" /> Import
-            </button>
-            <button
-              type="button"
               onClick={handleExport}
               className="flex items-center gap-2 px-3 py-2 bg-white/5 hover:bg-white/10 border border-white/8 text-gray-400 hover:text-white rounded-xl transition-all"
               style={{ fontSize: "0.8rem" }}

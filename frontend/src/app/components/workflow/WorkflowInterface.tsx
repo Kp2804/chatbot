@@ -96,7 +96,7 @@ function StatusBadge({ status }: { status: Workflow["status"] }) {
   };
   return (
     <span className={`flex items-center gap-1.5 px-2.5 py-1 border rounded-full ${styles[status]}`} style={{ fontSize: "0.72rem", fontWeight: 600 }}>
-      <span className={`w-1.5 h-1.5 rounded-full ${status === 'active' ? 'bg-emerald-400 animate-pulse' : 'bg-current'}`} />
+      <span className={`w-1.5 h-1.5 rounded-full ${status === 'active' ? 'bg-emerald-400 dark:bg-violet-400 animate-pulse' : 'bg-current'}`} />
       {status.charAt(0).toUpperCase() + status.slice(1)}
     </span>
   );
@@ -106,7 +106,7 @@ function ToastNotification({ message, type }: { message: string; type: "success"
   return (
     <div className="fixed top-24 right-8 z-[100] animate-in slide-in-from-right-10 fade-in duration-300">
       <div className={`flex items-center gap-3 px-6 py-3.5 rounded-2xl shadow-2xl border backdrop-blur-md ${type === "success"
-        ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
+        ? "bg-emerald-500/10 dark:bg-violet-500/10 border-emerald-500/20 dark:border-violet-500/20 text-emerald-400 dark:text-violet-300"
         : "bg-blue-500/10 border-blue-500/20 text-blue-400"
         }`} style={{ fontSize: "0.9rem", fontWeight: 500 }}>
         <CheckCircle2 className="w-5 h-5" />
@@ -204,8 +204,10 @@ export function WorkflowInterface() {
         name: `${wf.name} (Clone)`,
         description: wf.description,
         status: "draft",
-        nodes: wf.nodes.map((n) => ({ ...n, id: `node_${Date.now()}_${Math.random().toString(36).slice(2, 6)}` })),
-        edges: wf.edges.map((e) => ({ ...e, id: `edge_${Date.now()}_${Math.random().toString(36).slice(2, 6)}` })),
+        steps: {
+          nodes: wf.nodes.map((n) => ({ ...n, id: `node_${Date.now()}_${Math.random().toString(36).slice(2, 6)}` })),
+          edges: wf.edges.map((e) => ({ ...e, id: `edge_${Date.now()}_${Math.random().toString(36).slice(2, 6)}` }))
+        },
         tags: wf.tags,
         triggers: 0,
         runs: 0,
@@ -298,7 +300,7 @@ export function WorkflowInterface() {
           <button
             type="button"
             onClick={() => navigate("/app/workflows/new")}
-            className="group flex items-center gap-3 px-8 py-4 bg-gradient-to-br from-violet-600 to-indigo-800 hover:from-violet-500 hover:to-indigo-700 text-white rounded-3xl transition-all shadow-3xl shadow-violet-600/30 font-black tracking-tight"
+            className="group flex items-center gap-3 px-8 py-4 bg-gradient-to-br from-emerald-600 to-teal-700 dark:from-violet-600 dark:to-indigo-800 hover:from-emerald-700 hover:to-teal-800 dark:hover:from-violet-500 dark:hover:to-indigo-700 text-white rounded-3xl transition-all shadow-3xl shadow-emerald-600/30 dark:shadow-violet-600/30 font-black tracking-tight"
             style={{ fontSize: "1rem" }}
           >
             <Plus className="w-5 h-5 group-hover:rotate-90 transition-transform duration-500" />
@@ -309,7 +311,7 @@ export function WorkflowInterface() {
         <div className="grid grid-cols-4 gap-6 mb-12">
           {[
             { label: "Active Nodes", value: activeCount.toString(), desc: "Online Instances", color: "from-emerald-500/20" },
-            { label: "Total Flows", value: workflows.length.toString(), desc: "Global Inventory", color: "from-violet-500/10" },
+            { label: "Total Flows", value: workflows.length.toString(), desc: "Global Inventory", color: "from-violet-500/10 dark:from-violet-500/20" },
             { label: "Aggregated Runs", value: totalRuns.toLocaleString(), desc: "Execution Metric", color: "from-blue-500/10" },
             { label: "Avg Precision", value: `${avgSuccess}%`, desc: "System Accuracy", color: "from-amber-500/10" },
           ].map((stat) => (
@@ -322,7 +324,7 @@ export function WorkflowInterface() {
         </div>
 
         <div className="flex items-center gap-5 mb-10">
-          <div className="flex items-center gap-3 bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/10 rounded-[1.5rem] px-5 py-4 flex-1 max-w-md focus-within:border-violet-600/50 transition-all">
+          <div className="flex items-center gap-3 bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/10 rounded-[1.5rem] px-5 py-4 flex-1 max-w-md focus-within:border-emerald-600/50 dark:focus-within:border-violet-600/50 transition-all">
             <Search className="w-5 h-5 text-gray-400 dark:text-gray-700" />
             <input
               type="text"
@@ -352,19 +354,19 @@ export function WorkflowInterface() {
 
         <div className="flex flex-col gap-5">
           {filtered.length === 0 ? (
-            <div className="text-center py-32 bg-white dark:bg-white/[0.01] border-2 border-dashed border-gray-200 dark:border-white/5 rounded-[3rem]">
-              <GitBranch className="w-20 h-20 mx-auto mb-6 text-gray-200 dark:text-gray-900" />
+            <div className="text-center py-32 bg-white dark:bg-[#111019] border-2 border-dashed border-emerald-200 dark:border-purple-500/30 rounded-[3rem]">
+              <GitBranch className="w-20 h-20 mx-auto mb-6 text-emerald-100 dark:text-purple-500/20" />
               <p className="text-gray-400 dark:text-gray-500 font-black uppercase tracking-[0.3em] text-[0.7rem] mb-2">Registry Void</p>
               <p className="text-gray-400 dark:text-gray-700 font-bold" style={{ fontSize: "0.9rem" }}>No workflow entities detected matching current filters.</p>
             </div>
           ) : (
             filtered.map((workflow) => (
-              <div key={workflow.id} className="group bg-white dark:bg-[#0f0f15] hover:bg-gray-50 dark:hover:bg-[#12121c] border border-gray-200 dark:border-white/5 hover:border-violet-500/30 rounded-[2.5rem] overflow-hidden transition-all duration-500">
+              <div key={workflow.id} className="group bg-white dark:bg-[#0f0f15] hover:bg-gray-50 dark:hover:bg-[#12121c] border border-gray-200 dark:border-white/5 hover:border-emerald-500/30 dark:hover:border-violet-500/30 rounded-[2.5rem] overflow-hidden transition-all duration-500">
                 <div className="p-8">
                   <div className="flex items-center justify-between gap-8">
                     <div className="flex items-center gap-6 flex-1">
-                      <div className="w-16 h-16 bg-gradient-to-br from-violet-600/10 to-indigo-600/10 border border-gray-200 dark:border-white/5 rounded-[1.5rem] flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform duration-700">
-                        <GitBranch className="w-8 h-8 text-violet-500" />
+                      <div className="w-16 h-16 bg-gradient-to-br from-emerald-600/10 to-teal-600/10 dark:from-violet-600/10 dark:to-indigo-600/10 border border-gray-200 dark:border-white/5 rounded-[1.5rem] flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform duration-700">
+                        <GitBranch className="w-8 h-8 text-emerald-600 dark:text-violet-500" />
                       </div>
                       <div className="flex-1">
                         <div className="flex items-center gap-4 mb-2">
@@ -404,21 +406,21 @@ export function WorkflowInterface() {
                     ref={(el) => {
                       previewSectionRefs.current[workflow.id] = el;
                     }}
-                    className="border-t border-gray-100 dark:border-white/5 bg-gray-50 dark:bg-black/60 p-10 animate-in fade-in slide-in-from-top-4 duration-500"
+                    className="border-t border-gray-100 dark:border-white/5 bg-gray-50 dark:bg-[#0f0f15] p-10 animate-in fade-in slide-in-from-top-4 duration-500"
                   >
                     <div className="flex items-center justify-between mb-8 px-2">
                       <div className="flex items-center gap-6">
                         <button
                           type="button"
                           onClick={() => setPreviewMode(workflow.id, "structure")}
-                          className={`font-black uppercase tracking-[0.3em] text-[0.65rem] py-1 border-b-2 transition-colors ${getPreviewMode(workflow.id) === "structure" ? "text-gray-900 dark:text-white border-violet-600" : "text-gray-400 dark:text-gray-600 border-transparent hover:text-gray-700 dark:hover:text-gray-400"}`}
+                          className={`font-black uppercase tracking-[0.3em] text-[0.65rem] py-1 border-b-2 transition-colors ${getPreviewMode(workflow.id) === "structure" ? "text-gray-900 dark:text-white border-emerald-600 dark:border-violet-600" : "text-gray-400 dark:text-gray-600 border-transparent hover:text-gray-700 dark:hover:text-gray-400"}`}
                         >
                           Flow Structure
                         </button>
                         <button
                           type="button"
                           onClick={() => setPreviewMode(workflow.id, "visual")}
-                          className={`font-black uppercase tracking-[0.3em] text-[0.65rem] py-1 border-b-2 transition-colors ${getPreviewMode(workflow.id) === "visual" ? "text-gray-900 dark:text-white border-violet-600" : "text-gray-400 dark:text-gray-600 border-transparent hover:text-gray-700 dark:hover:text-gray-400"}`}
+                          className={`font-black uppercase tracking-[0.3em] text-[0.65rem] py-1 border-b-2 transition-colors ${getPreviewMode(workflow.id) === "visual" ? "text-gray-900 dark:text-white border-emerald-600 dark:border-violet-600" : "text-gray-400 dark:text-gray-600 border-transparent hover:text-gray-700 dark:hover:text-gray-400"}`}
                         >
                           Visual Preview
                         </button>
@@ -429,109 +431,121 @@ export function WorkflowInterface() {
                       <div className="flex gap-6 overflow-x-auto pb-10 snap-x snap-mandatory no-scrollbar scroll-smooth">
                         {workflow.nodes.map((node, i) => (
                           <div key={node.id} className="flex-shrink-0 w-80 snap-center">
-                            <div className="bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/10 rounded-[2.5rem] p-6 hover:border-violet-500/40 transition-all duration-700 transform hover:-translate-y-2 group/node">
+                            <div className="bg-white dark:bg-[#1a1a24] border border-gray-200 dark:border-white/10 rounded-[2.5rem] p-6 hover:border-emerald-500/40 dark:hover:border-violet-500/40 transition-all duration-700 transform hover:-translate-y-2 group/node">
                               <div className="flex items-center justify-between mb-6">
-                                <span className="text-[0.6rem] font-black text-gray-400 dark:text-gray-800 uppercase tracking-widest leading-none">{node.type === 'trigger' ? 'TRIGGER' : `NODE: ${(i).toString().padStart(2, '0')}`}</span>
-                                <div className="w-10 h-10 rounded-2xl bg-gray-100 dark:bg-white/5 flex items-center justify-center group-hover/node:rotate-12 transition-transform">
-                                  <MessageSquare className="w-5 h-5 text-violet-500/70" />
+                                <span className="text-[0.6rem] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest leading-none">{node.type === 'trigger' ? 'TRIGGER' : `NODE: ${(i).toString().padStart(2, '0')}`}</span>
+                                <div className="w-10 h-10 rounded-2xl bg-gray-100 dark:bg-white/10 flex items-center justify-center group-hover/node:rotate-12 transition-transform">
+                                  <MessageSquare className="w-5 h-5 text-emerald-600 dark:text-violet-500/70" />
                                 </div>
                               </div>
                               <h6 className="text-gray-900 dark:text-white font-black mb-3 truncate pr-4 text-base tracking-tight">{node.name}</h6>
-                              <p className="text-gray-500 text-xs line-clamp-3 mb-6 leading-relaxed font-medium">{node.message}</p>
+                              <p className="text-gray-500 dark:text-gray-400 text-xs line-clamp-3 mb-6 leading-relaxed font-medium">{node.message}</p>
 
                               <div className="space-y-2">
                                 {workflow.edges.filter(e => e.source === node.id).map((edge) => {
                                   const target = workflow.nodes.find(n => n.id === edge.target);
                                   return (
-                                    <div key={edge.id} className="flex items-center justify-between px-4 py-2.5 bg-gray-50 dark:bg-black/40 rounded-2xl border border-gray-200 dark:border-white/5 group/opt">
-                                      <span className="text-[0.65rem] font-bold text-gray-500 truncate group-hover/opt:text-gray-900 dark:group-hover/opt:text-white transition-colors">{target?.name || 'End'}</span>
-                                      <ArrowRight className="w-3.5 h-3.5 text-violet-600/30 group-hover/opt:text-violet-600 transition-colors" />
+                                    <div key={edge.id} className="flex items-center justify-between px-4 py-2.5 bg-gray-50 dark:bg-white/5 rounded-2xl border border-gray-200 dark:border-white/10 group/opt">
+                                      <span className="text-[0.65rem] font-bold text-gray-500 dark:text-gray-400 truncate group-hover/opt:text-gray-900 dark:group-hover/opt:text-white transition-colors">{target?.name || 'End'}</span>
+                                      <ArrowRight className="w-3.5 h-3.5 text-emerald-600/30 dark:text-violet-600/30 group-hover/opt:text-emerald-600 dark:group-hover/opt:text-violet-600 transition-colors" />
                                     </div>
                                   );
                                 })}
-                                {!workflow.edges.filter(e => e.source === node.id).length && <div className="text-center py-3 text-gray-300 dark:text-gray-800 text-[0.6rem] font-black uppercase tracking-[0.2em]">End of Flow</div>}
+                                {!workflow.edges.filter(e => e.source === node.id).length && <div className="text-center py-3 text-gray-300 dark:text-gray-700 text-[0.6rem] font-black uppercase tracking-[0.2em]">End of Flow</div>}
                               </div>
                             </div>
                           </div>
                         ))}
                       </div>
                     ) : (
-                      <div className="overflow-auto pb-10">
-                        <div className="relative min-w-[980px] h-[420px] rounded-[2rem] border border-gray-200 dark:border-white/10 bg-gray-100 dark:bg-white/[0.02]">
-                          <svg className="absolute inset-0 w-full h-full pointer-events-none">
-                            {workflow.edges.map((edge) => {
-                              const sourceNode = workflow.nodes.find((n) => n.id === edge.source);
-                              const targetNode = workflow.nodes.find((n) => n.id === edge.target);
-                              if (!sourceNode || !targetNode) return null;
+                      <div className="overflow-y-auto pb-10 max-h-[600px]">
+                        <div className="py-4 px-6">
+                          {(() => {
+                            // Build parent-child and incoming relationships
+                            const childrenOf = new Map<string, string[]>();
+                            const incomingFor = new Map<string, number>();
+                            workflow.nodes.forEach(n => childrenOf.set(n.id, []));
+                            workflow.nodes.forEach(n => incomingFor.set(n.id, 0));
 
-                              const minX = Math.min(...workflow.nodes.map((n) => n.position?.x || 0));
-                              const maxX = Math.max(...workflow.nodes.map((n) => n.position?.x || 0));
-                              const minY = Math.min(...workflow.nodes.map((n) => n.position?.y || 0));
-                              const maxY = Math.max(...workflow.nodes.map((n) => n.position?.y || 0));
-                              const spanX = Math.max(maxX - minX, 1);
-                              const spanY = Math.max(maxY - minY, 1);
+                            workflow.edges.forEach(e => {
+                              childrenOf.get(e.source)?.push(e.target);
+                              incomingFor.set(e.target, (incomingFor.get(e.target) || 0) + 1);
+                            });
 
-                              const nodeWidth = 180;
-                              const nodeHeight = 86;
-                              const paddingX = 80;
-                              const paddingY = 60;
-                              const areaWidth = 980 - paddingX * 2 - nodeWidth;
-                              const areaHeight = 420 - paddingY * 2 - nodeHeight;
+                            // Find root nodes (no incoming edges)
+                            const roots = workflow.nodes.filter(n => (incomingFor.get(n.id) || 0) === 0);
 
-                              const sourceX = paddingX + (((sourceNode.position?.x || 0) - minX) / spanX) * areaWidth + nodeWidth / 2;
-                              const sourceY = paddingY + (((sourceNode.position?.y || 0) - minY) / spanY) * areaHeight + nodeHeight;
-                              const targetX = paddingX + (((targetNode.position?.x || 0) - minX) / spanX) * areaWidth + nodeWidth / 2;
-                              const targetY = paddingY + (((targetNode.position?.y || 0) - minY) / spanY) * areaHeight;
+                            // Recursive tree render
+                            const renderTree = (nodeId: string, depth: number = 0, isLast: boolean = true): React.ReactNode => {
+                              const node = workflow.nodes.find(n => n.id === nodeId);
+                              if (!node) return null;
 
-                              const controlY = sourceY + (targetY - sourceY) / 2;
+                              const children = childrenOf.get(nodeId) || [];
+                              const indent = depth * 2;
+                              const isLeaf = children.length === 0;
 
                               return (
-                                <path
-                                  key={edge.id}
-                                  d={`M ${sourceX} ${sourceY} C ${sourceX} ${controlY}, ${targetX} ${controlY}, ${targetX} ${targetY}`}
-                                  fill="none"
-                                  stroke="rgba(139, 92, 246, 0.55)"
-                                  strokeWidth="2"
-                                />
-                              );
-                            })}
-                          </svg>
+                                <div key={node.id} className="relative">
+                                  <div className="flex items-start gap-3" style={{ marginLeft: `${indent * 1.5}rem` }}>
+                                    {/* Connection line */}
+                                    {depth > 0 && (
+                                      <div className="absolute -left-8 top-0 w-8 h-12 pointer-events-none" style={{ marginLeft: `${(indent - 2.5) * 1.5}rem` }}>
+                                        <svg className="w-full h-full" viewBox="0 0 32 48" preserveAspectRatio="none">
+                                          <line x1="16" y1="0" x2="16" y2="24" stroke="currentColor" strokeWidth="1.5" className="text-gray-300 dark:text-gray-600" />
+                                          <line x1="16" y1="24" x2="32" y2="24" stroke="currentColor" strokeWidth="1.5" className="text-gray-300 dark:text-gray-600" />
+                                        </svg>
+                                      </div>
+                                    )}
 
-                          {workflow.nodes.map((node, index) => {
-                            const minX = Math.min(...workflow.nodes.map((n) => n.position?.x || 0));
-                            const maxX = Math.max(...workflow.nodes.map((n) => n.position?.x || 0));
-                            const minY = Math.min(...workflow.nodes.map((n) => n.position?.y || 0));
-                            const maxY = Math.max(...workflow.nodes.map((n) => n.position?.y || 0));
-                            const spanX = Math.max(maxX - minX, 1);
-                            const spanY = Math.max(maxY - minY, 1);
+                                    {/* Node content */}
+                                    <div className="flex-1 pt-1">
+                                      <div className={`bg-white dark:bg-[#1a1a24] border rounded-2xl p-4 hover:bg-gray-50 dark:hover:bg-[#232332] transition-all ${node.type === 'trigger' ? 'border-amber-500/30' : 'border-emerald-500/30 dark:border-violet-500/30'}`}>
+                                        <div className="flex items-start gap-3 mb-2">
+                                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-xs flex-shrink-0 ${node.type === 'trigger' ? 'bg-amber-500' : 'bg-emerald-600 dark:bg-violet-600'}`}>
+                                            {node.type === 'trigger' ? '⚡' : '→'}
+                                          </div>
+                                          <div className="flex-1 min-w-0">
+                                            <div className="text-[0.65rem] font-black uppercase tracking-widest mb-0.5">
+                                              {node.type === 'trigger' ? 'Trigger' : 'Action'}
+                                            </div>
+                                            <h5 className="text-gray-900 dark:text-white font-bold text-sm truncate">{node.name}</h5>
+                                          </div>
+                                        </div>
+                                        <p className="text-gray-600 dark:text-gray-400 text-xs leading-relaxed line-clamp-2">{node.message}</p>
 
-                            const nodeWidth = 180;
-                            const nodeHeight = 86;
-                            const paddingX = 80;
-                            const paddingY = 60;
-                            const areaWidth = 980 - paddingX * 2 - nodeWidth;
-                            const areaHeight = 420 - paddingY * 2 - nodeHeight;
+                                        {!isLeaf && (
+                                          <div className="mt-3 pt-3 border-t border-gray-200 dark:border-white/5 flex flex-wrap gap-1.5">
+                                            {children.map(childId => {
+                                              const child = workflow.nodes.find(n => n.id === childId);
+                                              return (
+                                                <span key={childId} className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-500/10 dark:bg-violet-500/10 text-emerald-700 dark:text-violet-300 rounded text-[0.6rem] font-bold truncate">
+                                                  → {child?.name || 'Unknown'}
+                                                </span>
+                                              );
+                                            })}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
 
-                            const left = paddingX + (((node.position?.x || 0) - minX) / spanX) * areaWidth;
-                            const top = paddingY + (((node.position?.y || 0) - minY) / spanY) * areaHeight;
-
-                            return (
-                              <div
-                                key={node.id}
-                                className="absolute w-[180px] h-[86px] rounded-2xl border border-gray-200 dark:border-white/10 bg-white dark:bg-black/40 p-3"
-                                style={{ left, top }}
-                              >
-                                <div className="flex items-center justify-between mb-2">
-                                  <span className="text-[0.52rem] font-black text-gray-400 dark:text-gray-700 uppercase tracking-widest">
-                                    {node.type === 'trigger' ? 'Trigger' : `Node ${index + 1}`}
-                                  </span>
-                                  <span className="w-2 h-2 rounded-full bg-violet-500/70" />
+                                  {/* Render children */}
+                                  {children.length > 0 && (
+                                    <div className="mt-4">
+                                      {children.map((childId, idx) => renderTree(childId, depth + 1, idx === children.length - 1))}
+                                    </div>
+                                  )}
                                 </div>
-                                <p className="text-gray-900 dark:text-white text-xs font-bold truncate">{node.name}</p>
-                                <p className="text-gray-500 text-[0.62rem] mt-1 truncate">{node.message || 'No message'}</p>
-                              </div>
-                            );
-                          })}
+                              );
+                            };
+
+                            // Render all root nodes and their descendants
+                            if (roots.length === 0) {
+                              return <div className="text-center py-8 text-gray-400 dark:text-gray-500 text-sm font-medium">No nodes found</div>;
+                            }
+
+                            return roots.map(root => renderTree(root.id));
+                          })()}
                         </div>
                       </div>
                     )}
@@ -541,7 +555,7 @@ export function WorkflowInterface() {
                         <button
                           type="button"
                           onClick={() => navigate(`/app/workflows/${workflow.id}`)}
-                          className="flex items-center gap-3 px-8 py-4 bg-violet-600 hover:bg-violet-500 text-white rounded-3xl transition-all font-black text-xs uppercase tracking-widest shadow-xl shadow-violet-600/20"
+                          className="flex items-center gap-3 px-8 py-4 bg-emerald-600 dark:bg-violet-600 hover:bg-emerald-500 dark:hover:bg-violet-500 text-white rounded-3xl transition-all font-black text-xs uppercase tracking-widest shadow-xl shadow-emerald-600/20 dark:shadow-violet-600/20"
                         >
                           <Edit2 className="w-4 h-4" /> Open Editor
                         </button>
@@ -576,7 +590,7 @@ export function WorkflowInterface() {
                           <button
                             type="button"
                             onClick={() => handleToggleStatus(workflow.id, workflow.status)}
-                            className="flex items-center gap-3 px-8 py-4 bg-emerald-500/5 hover:bg-emerald-500/20 border border-emerald-500/20 text-emerald-500 rounded-3xl transition-all font-black text-xs uppercase tracking-widest"
+                            className="flex items-center gap-3 px-8 py-4 bg-emerald-500/5 dark:bg-violet-500/5 hover:bg-emerald-500/20 dark:hover:bg-violet-500/20 border border-emerald-500/20 dark:border-violet-500/20 text-emerald-500 dark:text-violet-300 rounded-3xl transition-all font-black text-xs uppercase tracking-widest"
                           >
                             <Play className="w-4 h-4" /> Activate
                           </button>
@@ -608,6 +622,8 @@ export function WorkflowInterface() {
           onCancel={() => setDeleteConfirm(null)}
         />
       )}
+
+      {toast && <ToastNotification message={toast.message} type={toast.type} />}
     </div>
   );
 }

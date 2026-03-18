@@ -17,6 +17,7 @@ import { createClient } from '@supabase/supabase-js';
 import { createRequire } from 'module';
 import crypto from 'crypto';
 import { translateText } from './services/translation';
+import { incrementMessages } from './services/usage';
 const _require = createRequire(import.meta.url);
 
 // Direct import used to bypass pdf-parse ESM startup issue
@@ -816,6 +817,26 @@ app.post('/api/chat', rateLimitMiddleware, async (req: Request, res: Response) =
     const finalResponse = selectedLang === 'hi'
       ? await translateText(completion.response, 'hi', 'en')
       : completion.response;
+
+    if (supabaseAdmin && chatbotId) {
+      try {
+        const { data: chatbotRow, error: chatbotError } = await supabaseAdmin
+          .from('chatbots')
+          .select('user_id')
+          .eq('id', chatbotId)
+          .maybeSingle();
+
+        if (chatbotError) {
+          throw new Error(chatbotError.message);
+        }
+
+        if (chatbotRow?.user_id) {
+          await incrementMessages(supabaseAdmin, chatbotRow.user_id);
+        }
+      } catch (usageError: any) {
+        console.warn('Usage tracking warning (messages_used):', usageError?.message || usageError);
+      }
+    }
 
     res.json({ 
       response: finalResponse,

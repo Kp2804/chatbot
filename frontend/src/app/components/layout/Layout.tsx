@@ -22,6 +22,15 @@ import {
 } from "lucide-react";
 import { supabase } from "../../../lib/supabase";
 
+type AppNotification = {
+  id: string;
+  title: string;
+  desc: string;
+  time: string;
+  read: boolean;
+  createdAt: string;
+};
+
 type NavItem = {
   path: string;
   icon: typeof MessageSquare;
@@ -69,11 +78,7 @@ export function Layout() {
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
-  const [notifications, setNotifications] = useState([
-    { id: 1, title: "New conversation started", desc: "A user started a new chat session.", time: "2m ago", read: false },
-    { id: 2, title: "FAQ updated", desc: "Your FAQ entry was saved successfully.", time: "1h ago", read: false },
-    { id: 3, title: "Workflow triggered", desc: "Workflow \"Welcome Flow\" ran successfully.", time: "3h ago", read: true },
-  ]);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const notifRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
@@ -81,6 +86,36 @@ export function Layout() {
   const activeChatbotId = localStorage.getItem("activeChatbotId");
   const chatNavPath = activeChatbotId ? `/app/chat/${activeChatbotId}` : "/app";
   const isSelectionScreen = location.pathname === "/app";
+
+  const formatNotificationTime = (date: Date) => {
+    const diffMs = Date.now() - date.getTime();
+    const diffMin = Math.floor(diffMs / 60000);
+    if (diffMin < 1) return "just now";
+    if (diffMin < 60) return `${diffMin}m ago`;
+    const diffHours = Math.floor(diffMin / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
+    const diffDays = Math.floor(diffHours / 24);
+    return `${diffDays}d ago`;
+  };
+
+  const pushNotification = (title: string, desc: string) => {
+    const createdAt = new Date().toISOString();
+    const id = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+    setNotifications((prev) => [
+      {
+        id,
+        title,
+        desc,
+        time: formatNotificationTime(new Date(createdAt)),
+        read: false,
+        createdAt,
+      },
+      ...prev,
+    ].slice(0, 30));
+  };
 
   // Initialize dark mode from localStorage
   useEffect(() => {
@@ -161,6 +196,62 @@ export function Layout() {
 
     return () => subscription.unsubscribe();
   }, [navigate]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const channel = supabase.channel(`user-notifications:${user.id}`);
+
+    channel
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "conversations", filter: `user_id=eq.${user.id}` },
+        () => pushNotification("New conversation", "A new chat session was created.")
+      )
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "chatbots", filter: `user_id=eq.${user.id}` },
+        () => pushNotification("Chatbot created", "A new chatbot was added to your workspace.")
+      )
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "faqs", filter: `user_id=eq.${user.id}` },
+        () => pushNotification("FAQ added", "A new FAQ entry was created.")
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "faqs", filter: `user_id=eq.${user.id}` },
+        () => pushNotification("FAQ updated", "An FAQ entry was updated.")
+      )
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "workflows", filter: `user_id=eq.${user.id}` },
+        () => pushNotification("Workflow created", "A workflow was created.")
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "subscriptions", filter: `user_id=eq.${user.id}` },
+        () => pushNotification("Subscription updated", "Your billing subscription status changed.")
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [user?.id]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setNotifications((prev) => prev.map((item) => ({
+        ...item,
+        time: formatNotificationTime(new Date(item.createdAt)),
+      })));
+    }, 30000);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, []);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -403,7 +494,11 @@ export function Layout() {
             <button
               type="button"
               onClick={handleDarkModeToggle}
-              className="w-8 h-8 flex items-center justify-center text-gray-600 dark:text-gray-500 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-white/5 rounded-lg transition-all"
+              className={`w-8 h-8 flex items-center justify-center rounded-lg transition-all ${
+                isDarkMode
+                  ? "text-gray-600 dark:text-gray-500 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-white/5"
+                  : "text-emerald-700 bg-emerald-100 hover:bg-emerald-200"
+              }`}
               title={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
             >
               {isDarkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}

@@ -463,9 +463,9 @@ export function KnowledgeBasePage() {
   };
 
   const renderStat = (label: string, value: string | number, highlight?: boolean) => (
-    <div className="flex flex-col gap-1 bg-white/5 border border-white/10 rounded-2xl px-4 py-3 min-w-[160px]">
-      <span className="text-gray-500 text-xs uppercase tracking-[0.08em]">{label}</span>
-      <span className={`text-white text-lg font-bold ${highlight ? "text-violet-300" : ""}`}>{value}</span>
+    <div className="flex flex-col gap-1 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-2xl px-4 py-3 min-w-[160px]">
+      <span className="text-gray-500 dark:text-gray-500 text-xs uppercase tracking-[0.08em]">{label}</span>
+      <span className={`text-gray-900 dark:text-white text-lg font-bold ${highlight ? "text-violet-600 dark:text-violet-300" : ""}`}>{value}</span>
     </div>
   );
 
@@ -498,32 +498,32 @@ export function KnowledgeBasePage() {
   }, [websiteSources, url]);
 
   return (
-    <div className="h-full overflow-y-auto bg-[#08080c]">
+    <div className="h-full overflow-y-auto bg-gray-50 dark:bg-[#08080c]">
       <div className="max-w-6xl mx-auto p-8 space-y-8">
         <div className="flex flex-col gap-2">
-          <p className="text-xs text-gray-500 uppercase tracking-[0.2em]">Knowledge Base</p>
+          <p className="text-xs text-gray-500 dark:text-gray-500 uppercase tracking-[0.2em]">Knowledge Base</p>
           <div className="flex items-center justify-between gap-4">
             <div>
-              <h1 className="text-white" style={{ fontSize: "2rem", fontWeight: 900 }}>
+              <h1 className="text-gray-900 dark:text-white" style={{ fontSize: "2rem", fontWeight: 900 }}>
                 {view === "website" ? "Train From Website" : "Upload Documents"}
               </h1>
-              <p className="text-gray-500" style={{ fontSize: "0.9rem" }}>
+              <p className="text-gray-600 dark:text-gray-500" style={{ fontSize: "0.9rem" }}>
                 {view === "website"
                   ? "Paste your website and automatically turn its content into chatbot knowledge. Content stays isolated to this chatbot."
                   : "Upload PDFs and keep them isolated to this chatbot’s knowledge base."}
               </p>
             </div>
-            <div className="hidden md:flex items-center gap-3 text-gray-400 text-sm">
+            <div className="hidden md:flex items-center gap-3 text-gray-600 dark:text-gray-400 text-sm">
               <ShieldCheck className="w-4 h-4 text-emerald-400" />
               Data remains scoped to your selected chatbot
             </div>
           </div>
-          <div className="mt-3 inline-flex bg-white/5 border border-white/10 rounded-2xl p-1 w-max">
+          <div className="mt-3 inline-flex bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-2xl p-1 w-max">
             <button
               type="button"
               onClick={() => setView("website")}
               className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
-                view === "website" ? "bg-white text-black" : "text-gray-400 hover:text-white"
+                view === "website" ? "bg-emerald-500 dark:bg-purple-600 text-white" : "text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
               }`}
             >
               Train From Website
@@ -532,7 +532,7 @@ export function KnowledgeBasePage() {
               type="button"
               onClick={() => setView("documents")}
               className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
-                view === "documents" ? "bg-white text-black" : "text-gray-400 hover:text-white"
+                view === "documents" ? "bg-emerald-500 dark:bg-purple-600 text-white" : "text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
               }`}
             >
               Upload PDFs
@@ -553,42 +553,42 @@ export function KnowledgeBasePage() {
         {view === "website" ? (
           <>
             {/* URL Input Card */}
-            <div className="bg-white/[0.02] border border-white/10 rounded-3xl p-6 space-y-5">
+            <div className="bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/10 rounded-3xl p-6 space-y-5">
               <div className="flex items-start justify-between gap-4">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 bg-violet-500/15 rounded-2xl flex items-center justify-center">
                     <Globe2 className="w-5 h-5 text-violet-300" />
                   </div>
                   <div>
-                    <p className="text-white font-semibold">Website to index</p>
-                    <p className="text-gray-500 text-sm">We’ll crawl, clean, deduplicate, and chunk content for this chatbot only.</p>
+                    <p className="text-gray-900 dark:text-white font-semibold">Website to index</p>
+                    <p className="text-gray-600 dark:text-gray-500 text-sm">We’ll crawl, clean, deduplicate, and chunk content for this chatbot only.</p>
                   </div>
                 </div>
-                <div className="hidden md:flex items-center gap-2 text-xs text-gray-500 bg-white/5 border border-white/10 px-3 py-1.5 rounded-xl">
+                <div className="hidden md:flex items-center gap-2 text-xs text-gray-600 dark:text-gray-500 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 px-3 py-1.5 rounded-xl">
                   <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" /> Isolation by chatbot
                 </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div className="md:col-span-2 space-y-2">
-                  <label className="text-xs text-gray-400">Website URL</label>
+                  <label className="text-xs text-gray-500 dark:text-gray-400">Website URL</label>
                   <input
                     value={url}
                     onChange={(e) => setUrl(e.target.value)}
                     placeholder="https://www.example.com"
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-violet-500/60"
+                    className="w-full bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl px-3 py-3 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:border-violet-500/60"
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs text-gray-400">Crawl scope</label>
-                  <div className="bg-white/5 border border-white/10 rounded-xl px-3 py-3 flex items-center justify-between text-white">
+                  <label className="text-xs text-gray-500 dark:text-gray-400">Crawl scope</label>
+                  <div className="bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl px-3 py-3 flex items-center justify-between text-gray-900 dark:text-white">
                     <select
                       value={scope}
                       onChange={(e) => setScope(e.target.value as WebsiteScope)}
                       className="bg-transparent w-full focus:outline-none text-sm"
                     >
                       {scopeOptions.map((option) => (
-                        <option key={option.value} value={option.value} className="bg-[#0f0f13] text-white">
+                        <option key={option.value} value={option.value} className="bg-white dark:bg-[#0f0f13] text-gray-900 dark:text-white">
                           {option.label} — {option.desc}
                         </option>
                       ))}
@@ -602,7 +602,7 @@ export function KnowledgeBasePage() {
                   type="button"
                   onClick={handlePreview}
                   disabled={previewLoading || !url.trim()}
-                  className="px-4 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 text-white rounded-xl transition-all flex items-center gap-2 disabled:opacity-60"
+                  className="px-4 py-2.5 bg-white dark:bg-white/5 hover:bg-gray-100 dark:hover:bg-white/10 border border-gray-200 dark:border-white/10 text-gray-900 dark:text-white rounded-xl transition-all flex items-center gap-2 disabled:opacity-60"
                 >
                   {previewLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
                   Preview crawl
@@ -611,13 +611,18 @@ export function KnowledgeBasePage() {
                   type="button"
                   onClick={handleIndex}
                   disabled={indexing === "running" || !url.trim() || websiteLock.hasConflict}
-                  className="px-5 py-2.5 bg-gradient-to-r from-violet-500 to-indigo-600 hover:from-violet-600 hover:to-indigo-700 text-white rounded-xl transition-all flex items-center gap-2 disabled:opacity-60"
+                  aria-busy={indexing === "running"}
+                  className={`min-w-[200px] px-5 py-2.5 rounded-xl transition-all inline-flex items-center justify-center gap-2 font-semibold leading-none flex-wrap disabled:opacity-70 disabled:cursor-not-allowed ${
+                    indexing === "running"
+                      ? "bg-emerald-600 text-white"
+                      : "bg-gradient-to-r from-violet-500 to-indigo-600 hover:from-violet-600 hover:to-indigo-700 text-white"
+                  }`}
                 >
-                  {indexing === "running" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
-                  {indexing === "running" ? "Indexing…" : "Start Indexing"}
+                  {indexing === "running" ? <Loader2 className="w-4 h-4 animate-spin shrink-0" /> : <Play className="w-4 h-4 shrink-0" />}
+                  <span>{indexing === "running" ? "Indexing website..." : "Start Indexing"}</span>
                 </button>
                 {websiteLock.hasConflict ? (
-                  <p className="text-gray-500 text-xs">
+                  <p className="text-gray-600 dark:text-gray-500 text-xs">
                     {`Locked to ${websiteLock.activeHost}. Clear website memory to index another site.`}
                   </p>
                 ) : null}
@@ -625,24 +630,24 @@ export function KnowledgeBasePage() {
             </div>
 
             {/* Crawl Settings */}
-            <div className="bg-white/[0.02] border border-white/10 rounded-3xl p-6 space-y-4">
-              <div className="flex items-center gap-2 text-white font-semibold">
+            <div className="bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/10 rounded-3xl p-6 space-y-4">
+              <div className="flex items-center gap-2 text-gray-900 dark:text-white font-semibold">
                 <Link2 className="w-4 h-4 text-violet-300" /> Crawl settings
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-xs text-gray-400">Include paths (comma separated)</label>
+                  <label className="text-xs text-gray-500 dark:text-gray-400">Include paths (comma separated)</label>
                   <input
                     placeholder="/blog, /docs"
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-white placeholder-gray-600"
+                    className="w-full bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2.5 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-600"
                     onChange={(e) => handlePathsChange(e.target.value, "includePaths")}
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs text-gray-400">Exclude paths (comma separated)</label>
+                  <label className="text-xs text-gray-500 dark:text-gray-400">Exclude paths (comma separated)</label>
                   <input
                     placeholder="/admin, /private"
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-white placeholder-gray-600"
+                    className="w-full bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2.5 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-600"
                     onChange={(e) => handlePathsChange(e.target.value, "excludePaths")}
                   />
                 </div>
@@ -650,43 +655,43 @@ export function KnowledgeBasePage() {
 
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="space-y-2">
-                  <label className="text-xs text-gray-400">Max pages</label>
+                  <label className="text-xs text-gray-500 dark:text-gray-400">Max pages</label>
                   <input
                     type="number"
                     min={1}
                     max={250}
                     value={rules.maxPages}
                     onChange={(e) => setRules((prev) => ({ ...prev, maxPages: Number(e.target.value) }))}
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-white"
+                    className="w-full bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2.5 text-gray-900 dark:text-white"
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs text-gray-400">Crawl depth</label>
+                  <label className="text-xs text-gray-500 dark:text-gray-400">Crawl depth</label>
                   <input
                     type="number"
                     min={0}
                     max={6}
                     value={rules.crawlDepth}
                     onChange={(e) => setRules((prev) => ({ ...prev, crawlDepth: Number(e.target.value) }))}
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-white"
+                    className="w-full bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2.5 text-gray-900 dark:text-white"
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs text-gray-400">Ignore query params</label>
+                  <label className="text-xs text-gray-500 dark:text-gray-400">Ignore query params</label>
                   <button
                     type="button"
                     onClick={() => setRules((prev) => ({ ...prev, ignoreQueryParams: !prev.ignoreQueryParams }))}
-                    className={`w-full px-3 py-2.5 rounded-xl border ${rules.ignoreQueryParams ? "border-emerald-400/40 bg-emerald-500/10 text-emerald-100" : "border-white/10 bg-white/5 text-white"}`}
+                    className={`w-full px-3 py-2.5 rounded-xl border ${rules.ignoreQueryParams ? "border-emerald-400/40 bg-emerald-500/10 text-emerald-800 dark:text-emerald-100" : "border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 text-gray-900 dark:text-white"}`}
                   >
                     {rules.ignoreQueryParams ? "On" : "Off"}
                   </button>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs text-gray-400">Follow external links</label>
+                  <label className="text-xs text-gray-500 dark:text-gray-400">Follow external links</label>
                   <button
                     type="button"
                     onClick={() => setRules((prev) => ({ ...prev, followExternalLinks: !prev.followExternalLinks }))}
-                    className={`w-full px-3 py-2.5 rounded-xl border ${rules.followExternalLinks ? "border-emerald-400/40 bg-emerald-500/10 text-emerald-100" : "border-white/10 bg-white/5 text-white"}`}
+                    className={`w-full px-3 py-2.5 rounded-xl border ${rules.followExternalLinks ? "border-emerald-400/40 bg-emerald-500/10 text-emerald-800 dark:text-emerald-100" : "border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 text-gray-900 dark:text-white"}`}
                   >
                     {rules.followExternalLinks ? "On" : "Off (recommended)"}
                   </button>
@@ -695,34 +700,34 @@ export function KnowledgeBasePage() {
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-2">
-                  <label className="text-xs text-gray-400">Strict source mode</label>
+                  <label className="text-xs text-gray-500 dark:text-gray-400">Strict source mode</label>
                   <button
                     type="button"
                     onClick={() => setRules((prev) => ({ ...prev, strictSourceMode: !prev.strictSourceMode }))}
-                    className={`w-full px-3 py-2.5 rounded-xl border ${rules.strictSourceMode ? "border-emerald-400/40 bg-emerald-500/10 text-emerald-100" : "border-white/10 bg-white/5 text-white"}`}
+                    className={`w-full px-3 py-2.5 rounded-xl border ${rules.strictSourceMode ? "border-emerald-400/40 bg-emerald-500/10 text-emerald-800 dark:text-emerald-100" : "border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 text-gray-900 dark:text-white"}`}
                   >
                     {rules.strictSourceMode ? "Enabled" : "Disabled"}
                   </button>
-                  <p className="text-gray-500 text-xs">Keep answers pinned to indexed text only.</p>
+                  <p className="text-gray-600 dark:text-gray-500 text-xs">Keep answers pinned to indexed text only.</p>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs text-gray-400">Auto re-sync</label>
-                  <div className="bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-white">
+                  <label className="text-xs text-gray-500 dark:text-gray-400">Auto re-sync</label>
+                  <div className="bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2.5 text-gray-900 dark:text-white">
                     <select
                       value={rules.autoResyncFrequency}
                       onChange={(e) => setRules((prev) => ({ ...prev, autoResyncFrequency: e.target.value as SyncFrequency }))}
                       className="bg-transparent w-full focus:outline-none text-sm"
                     >
-                      <option className="bg-[#0f0f13]" value="manual">Manual</option>
-                      <option className="bg-[#0f0f13]" value="weekly">Weekly</option>
-                      <option className="bg-[#0f0f13]" value="monthly">Monthly</option>
+                      <option className="bg-white dark:bg-[#0f0f13]" value="manual">Manual</option>
+                      <option className="bg-white dark:bg-[#0f0f13]" value="weekly">Weekly</option>
+                      <option className="bg-white dark:bg-[#0f0f13]" value="monthly">Monthly</option>
                     </select>
                   </div>
-                  <p className="text-gray-500 text-xs">Future-friendly: schedule refreshes per chatbot.</p>
+                  <p className="text-gray-600 dark:text-gray-500 text-xs">Future-friendly: schedule refreshes per chatbot.</p>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs text-gray-400">Max content estimate</label>
-                  <div className="px-3 py-2.5 rounded-xl border border-white/10 bg-white/5 text-white text-sm">
+                  <label className="text-xs text-gray-500 dark:text-gray-400">Max content estimate</label>
+                  <div className="px-3 py-2.5 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 text-gray-900 dark:text-white text-sm">
                     {preview ? formatBytes(preview.totals.estimatedContentSize) : "–"}
                   </div>
                 </div>
@@ -730,8 +735,8 @@ export function KnowledgeBasePage() {
             </div>
 
             {/* Preview */}
-            <div className="bg-white/[0.02] border border-white/10 rounded-3xl p-6 space-y-4">
-              <div className="flex items-center gap-2 text-white font-semibold">
+            <div className="bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/10 rounded-3xl p-6 space-y-4">
+              <div className="flex items-center gap-2 text-gray-900 dark:text-white font-semibold">
                 <RefreshCw className="w-4 h-4 text-violet-300" /> Preview before indexing
               </div>
               {preview ? (
@@ -742,12 +747,12 @@ export function KnowledgeBasePage() {
                   {renderStat("Est. size", formatBytes(preview.totals.estimatedContentSize))}
                 </div>
               ) : (
-                <p className="text-gray-500 text-sm">Run a preview to see what will be indexed.</p>
+                <p className="text-gray-600 dark:text-gray-500 text-sm">Run a preview to see what will be indexed.</p>
               )}
 
               {preview?.warnings?.length ? (
                 <div className="space-y-2">
-                  <p className="text-gray-400 text-sm">Warnings</p>
+                  <p className="text-gray-600 dark:text-gray-400 text-sm">Warnings</p>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                     {preview.warnings.map((w, i) => (
                       <div key={i} className="flex items-start gap-2 bg-amber-500/10 border border-amber-500/25 text-amber-100 px-3 py-2 rounded-xl">
@@ -764,14 +769,14 @@ export function KnowledgeBasePage() {
             </div>
 
             {/* Progress */}
-            <div className="bg-white/[0.02] border border-white/10 rounded-3xl p-6 space-y-4">
-              <div className="flex items-center gap-2 text-white font-semibold">
+            <div className="bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/10 rounded-3xl p-6 space-y-4">
+              <div className="flex items-center gap-2 text-gray-900 dark:text-white font-semibold">
                 <Loader2 className="w-4 h-4 text-violet-300" /> Live indexing progress
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {STAGES.map((stage, idx) => {
                   const status = idx < stagePointer ? "done" : idx === stagePointer && indexing === "running" ? "active" : idx <= stagePointer && indexing === "done" ? "done" : "idle";
-                  const color = status === "done" ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-100" : status === "active" ? "bg-violet-500/15 border-violet-500/30 text-violet-100" : "bg-white/5 border-white/10 text-gray-400";
+                  const color = status === "done" ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-800 dark:text-emerald-100" : status === "active" ? "bg-violet-500/15 border-violet-500/30 text-violet-700 dark:text-violet-100" : "bg-gray-50 dark:bg-white/5 border-gray-200 dark:border-white/10 text-gray-500 dark:text-gray-400";
                   return (
                     <div key={stage} className={`flex items-center gap-3 px-3 py-3 rounded-xl border ${color}`}>
                       {status === "done" ? <CheckCircle2 className="w-4 h-4" /> : status === "active" ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
@@ -783,13 +788,13 @@ export function KnowledgeBasePage() {
             </div>
 
             {/* Indexed pages table */}
-            <div className="bg-white/[0.02] border border-white/10 rounded-3xl p-6 space-y-4">
+            <div className="bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/10 rounded-3xl p-6 space-y-4">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-white font-semibold">
+                <div className="flex items-center gap-2 text-gray-900 dark:text-white font-semibold">
                   <ShieldCheck className="w-4 h-4 text-violet-300" /> Indexed website pages
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="text-xs text-gray-500">Per-chatbot isolation is enforced.</span>
+                  <span className="text-xs text-gray-600 dark:text-gray-500">Per-chatbot isolation is enforced.</span>
                   <button
                     type="button"
                     onClick={handleClearWebsiteMemory}
@@ -804,13 +809,13 @@ export function KnowledgeBasePage() {
               </div>
 
               {sourcesLoading ? (
-                <div className="flex items-center gap-2 text-gray-500 text-sm"><Loader2 className="w-4 h-4 animate-spin" /> Loading indexed pages…</div>
+                <div className="flex items-center gap-2 text-gray-600 dark:text-gray-500 text-sm"><Loader2 className="w-4 h-4 animate-spin" /> Loading indexed pages…</div>
               ) : websiteSources.length === 0 ? (
-                <p className="text-gray-500 text-sm">No website pages indexed yet. Run indexing to populate this table.</p>
+                <p className="text-gray-600 dark:text-gray-500 text-sm">No website pages indexed yet. Run indexing to populate this table.</p>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="min-w-full text-sm text-left">
-                    <thead className="text-gray-500">
+                    <thead className="text-gray-600 dark:text-gray-500">
                       <tr>
                         <th className="py-2 pr-4">Title</th>
                         <th className="py-2 pr-4">URL</th>
@@ -820,15 +825,15 @@ export function KnowledgeBasePage() {
                         <th className="py-2 pr-4">Actions</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-white/5">
+                    <tbody className="divide-y divide-gray-100 dark:divide-white/5">
                       {websiteSources.map((source) => (
-                        <tr key={source.id} className="text-white/90">
+                        <tr key={source.id} className="text-gray-800 dark:text-white/90">
                           <td className="py-3 pr-4 font-semibold">{source.title || "Untitled page"}</td>
                           <td className="py-3 pr-4 text-violet-200 flex items-center gap-2">
                             <a href={source.content || source.metadata?.url} target="_blank" rel="noreferrer" className="hover:underline">
                               {(source.content || source.metadata?.url || "").replace(/https?:\/\//, "")}
                             </a>
-                            <ExternalLink className="w-3.5 h-3.5 text-gray-500" />
+                            <ExternalLink className="w-3.5 h-3.5 text-gray-500 dark:text-gray-500" />
                           </td>
                           <td className="py-3 pr-4">
                             <span className={`px-2 py-1 rounded-full text-xs ${
@@ -844,15 +849,15 @@ export function KnowledgeBasePage() {
                           <td className="py-3 pr-4">{source.chunk_count ?? 0}</td>
                           <td className="py-3 pr-4">{source.last_synced_at ? new Date(source.last_synced_at).toLocaleString() : "–"}</td>
                           <td className="py-3 pr-4">
-                            <div className="flex items-center gap-2 text-gray-400">
+                            <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
                               <button
-                                className="px-2 py-1 rounded-lg border border-white/10 hover:border-violet-500/40 hover:text-white"
+                                className="px-2 py-1 rounded-lg border border-gray-200 dark:border-white/10 hover:border-violet-500/40 hover:text-gray-900 dark:hover:text-white"
                                 onClick={() => handleReindex(source.id)}
                               >
                                 Reindex
                               </button>
                               <button
-                                className="px-2 py-1 rounded-lg border border-white/10 hover:border-violet-500/40 hover:text-white flex items-center gap-1"
+                                className="px-2 py-1 rounded-lg border border-gray-200 dark:border-white/10 hover:border-violet-500/40 hover:text-gray-900 dark:hover:text-white flex items-center gap-1"
                                 onClick={() => handlePriorityToggle(source.id, !!source.priority || !!source.metadata?.priority)}
                               >
                                 {(source.priority || source.metadata?.priority) ? <Pin className="w-3 h-3" /> : <PinOff className="w-3 h-3" />}
@@ -876,8 +881,8 @@ export function KnowledgeBasePage() {
             </div>
 
             {/* Test retrieval */}
-            <div className="bg-white/[0.02] border border-white/10 rounded-3xl p-6 space-y-4">
-              <div className="flex items-center gap-2 text-white font-semibold">
+            <div className="bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/10 rounded-3xl p-6 space-y-4">
+              <div className="flex items-center gap-2 text-gray-900 dark:text-white font-semibold">
                 <Play className="w-4 h-4 text-violet-300" /> Test retrieval
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -885,7 +890,7 @@ export function KnowledgeBasePage() {
                   <input
                     value={testQuestion}
                     onChange={(e) => setTestQuestion(e.target.value)}
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-3 text-white"
+                    className="w-full bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl px-3 py-3 text-gray-900 dark:text-white"
                     placeholder="Ask a question using your indexed site"
                   />
                 </div>
@@ -893,14 +898,14 @@ export function KnowledgeBasePage() {
                   type="button"
                   onClick={handleTest}
                   disabled={testing || !testQuestion.trim()}
-                  className="px-4 py-3 bg-white/5 hover:bg-white/10 border border-white/10 text-white rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-60"
+                  className="px-4 py-3 bg-white dark:bg-white/5 hover:bg-gray-100 dark:hover:bg-white/10 border border-gray-200 dark:border-white/10 text-gray-900 dark:text-white rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-60"
                 >
                   {testing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />} Run test
                 </button>
               </div>
               {testAnswer && (
-                <div className="bg-white/5 border border-white/10 rounded-2xl p-4 space-y-3">
-                  <p className="text-white text-sm leading-relaxed">{testAnswer.answer}</p>
+                <div className="bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-2xl p-4 space-y-3">
+                  <p className="text-gray-900 dark:text-white text-sm leading-relaxed">{testAnswer.answer}</p>
                   {testAnswer.citations.length > 0 && (
                     <div className="text-xs text-gray-400 flex flex-wrap gap-3">
                       {testAnswer.citations.map((c) => (
@@ -915,8 +920,8 @@ export function KnowledgeBasePage() {
             </div>
 
             {/* Summary */}
-            <div className="bg-white/[0.02] border border-white/10 rounded-3xl p-6 space-y-4">
-              <div className="flex items-center gap-2 text-white font-semibold">
+            <div className="bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/10 rounded-3xl p-6 space-y-4">
+              <div className="flex items-center gap-2 text-gray-900 dark:text-white font-semibold">
                 <ShieldCheck className="w-4 h-4 text-violet-300" /> Sync & health summary
               </div>
               <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
@@ -931,19 +936,19 @@ export function KnowledgeBasePage() {
         ) : (
           <>
             {/* PDF Upload Section */}
-            <div className="bg-white/[0.02] border border-white/10 rounded-3xl p-6 space-y-5">
+            <div className="bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/10 rounded-3xl p-6 space-y-5">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-violet-500/15 rounded-2xl flex items-center justify-center">
                   <ShieldCheck className="w-5 h-5 text-violet-300" />
                 </div>
                 <div>
-                  <p className="text-white font-semibold">Upload PDFs</p>
-                  <p className="text-gray-500 text-sm">Drop or select PDFs to add to this chatbot’s knowledge base.</p>
+                  <p className="text-gray-900 dark:text-white font-semibold">Upload PDFs</p>
+                  <p className="text-gray-600 dark:text-gray-500 text-sm">Drop or select PDFs to add to this chatbot’s knowledge base.</p>
                 </div>
               </div>
 
               <div
-                className="border-2 border-dashed border-white/10 hover:border-violet-500/50 rounded-2xl p-8 flex flex-col items-center justify-center gap-3 cursor-pointer transition-all group"
+                className="border-2 border-dashed border-gray-200 dark:border-white/10 hover:border-violet-500/50 rounded-2xl p-8 flex flex-col items-center justify-center gap-3 cursor-pointer transition-all group"
                 onClick={() => fileInputRef.current?.click()}
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={(e) => {
@@ -969,10 +974,10 @@ export function KnowledgeBasePage() {
                   }
                 </div>
                 <div className="text-center">
-                  <p className="text-white text-sm font-semibold">
+                  <p className="text-gray-900 dark:text-white text-sm font-semibold">
                     {uploadStatus === "uploading" ? "Processing…" : "Drop a PDF here or click to upload"}
                   </p>
-                  <p className="text-gray-500 text-xs mt-0.5">Max 5 MB · PDF only</p>
+                  <p className="text-gray-600 dark:text-gray-500 text-xs mt-0.5">Max 5 MB · PDF only</p>
                 </div>
 
                 {uploadStatus !== "idle" && uploadStatus !== "uploading" && (
@@ -991,9 +996,9 @@ export function KnowledgeBasePage() {
               </div>
 
               {sourcesLoading ? (
-                <div className="flex items-center gap-2 text-gray-500 text-sm"><Loader2 className="w-4 h-4 animate-spin" /> Loading documents…</div>
+                <div className="flex items-center gap-2 text-gray-600 dark:text-gray-500 text-sm"><Loader2 className="w-4 h-4 animate-spin" /> Loading documents…</div>
               ) : pdfSources.length === 0 ? (
-                <p className="text-gray-600 text-sm text-center py-4">
+                <p className="text-gray-600 dark:text-gray-500 text-sm text-center py-4">
                   No documents indexed yet. Upload a PDF above to get started.
                 </p>
               ) : (
@@ -1001,14 +1006,14 @@ export function KnowledgeBasePage() {
                   {pdfSources.map((source) => (
                     <div
                       key={source.id}
-                      className="flex items-center gap-3 bg-white/[0.03] border border-white/8 rounded-xl px-4 py-3"
+                      className="flex items-center gap-3 bg-gray-50 dark:bg-white/[0.03] border border-gray-200 dark:border-white/8 rounded-xl px-4 py-3"
                     >
                       <div className="w-8 h-8 bg-violet-500/10 rounded-lg flex items-center justify-center flex-shrink-0">
                         <FileText className="w-4 h-4 text-violet-400" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-white text-sm font-medium truncate">{source.title}</p>
-                        <p className="text-gray-500 text-xs mt-0.5">
+                        <p className="text-gray-900 dark:text-white text-sm font-medium truncate">{source.title}</p>
+                        <p className="text-gray-600 dark:text-gray-500 text-xs mt-0.5">
                           {source.chunk_count ?? 0} chunks
                           {source.file_size ? ` · ${(source.file_size / 1024).toFixed(0)} KB` : ""}
                           {" · "}{new Date(source.created_at).toLocaleDateString()}
@@ -1026,7 +1031,7 @@ export function KnowledgeBasePage() {
                       <button
                         type="button"
                         onClick={() => handleDelete(source.id)}
-                        className="w-7 h-7 flex items-center justify-center text-gray-600 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all flex-shrink-0"
+                        className="w-7 h-7 flex items-center justify-center text-gray-600 dark:text-gray-600 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all flex-shrink-0"
                         title="Delete document"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -1038,8 +1043,8 @@ export function KnowledgeBasePage() {
             </div>
 
             {/* Summary for documents */}
-            <div className="bg-white/[0.02] border border-white/10 rounded-3xl p-6 space-y-4">
-              <div className="flex items-center gap-2 text-white font-semibold">
+            <div className="bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/10 rounded-3xl p-6 space-y-4">
+              <div className="flex items-center gap-2 text-gray-900 dark:text-white font-semibold">
                 <ShieldCheck className="w-4 h-4 text-violet-300" /> Knowledge health
               </div>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-3">

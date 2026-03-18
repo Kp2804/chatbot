@@ -109,14 +109,14 @@ export function ChatbotSelectionPage() {
   };
 
   return (
-    <div className="h-full overflow-y-auto bg-[#08080c]">
+    <div className="h-full overflow-y-auto bg-white dark:bg-[#08080c]">
       <div className="max-w-5xl mx-auto p-10">
         <div className="flex items-end justify-between mb-10">
           <div>
-            <h1 className="text-white mb-2 leading-none" style={{ fontSize: "2.3rem", fontWeight: 900, letterSpacing: "-0.03em" }}>
+            <h1 className="text-gray-900 dark:text-purple-100 mb-2 leading-none" style={{ fontSize: "2.3rem", fontWeight: 900, letterSpacing: "-0.03em" }}>
               Select Chatbot
             </h1>
-            <p className="text-gray-500 font-bold uppercase tracking-[0.2em]" style={{ fontSize: "0.7rem" }}>
+            <p className="text-emerald-700 dark:text-purple-300/80 font-bold uppercase tracking-[0.2em]" style={{ fontSize: "0.7rem" }}>
               Choose a chatbot to open conversations
             </p>
           </div>
@@ -126,7 +126,7 @@ export function ChatbotSelectionPage() {
               setNewChatbotName(`Chatbot ${chatbots.length + 1}`);
               setShowCreateModal(true);
             }}
-            className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-violet-500 to-indigo-600 hover:from-violet-600 hover:to-indigo-700 text-white rounded-2xl transition-all shadow-lg shadow-violet-500/25"
+            className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 dark:from-violet-600 dark:to-indigo-700 dark:hover:from-violet-700 dark:hover:to-indigo-800 text-white rounded-2xl transition-all shadow-lg shadow-emerald-600/25 dark:shadow-violet-600/25"
             style={{ fontSize: "0.85rem", fontWeight: 700 }}
           >
             <Plus className="w-4 h-4" /> Create Chatbot
@@ -134,7 +134,7 @@ export function ChatbotSelectionPage() {
         </div>
 
         {loading ? (
-          <div className="h-72 flex items-center justify-center text-gray-500">
+          <div className="h-72 flex items-center justify-center text-emerald-700 dark:text-purple-300/70">
             <RefreshCw className="w-6 h-6 animate-spin" />
           </div>
         ) : (
@@ -144,16 +144,16 @@ export function ChatbotSelectionPage() {
                 key={bot.id}
                 type="button"
                 onClick={() => handleSelectChatbot(bot.id)}
-                className="group bg-white/[0.02] hover:bg-white/[0.04] border border-white/10 hover:border-violet-500/40 rounded-[1.8rem] p-6 text-left transition-all"
+                className="group bg-white dark:bg-[#0f0f17] hover:bg-emerald-50 dark:hover:bg-[#151525] border border-emerald-100 dark:border-purple-500/20 hover:border-emerald-500/40 dark:hover:border-purple-400/50 rounded-[1.8rem] p-6 text-left transition-all"
               >
                 <div className="flex items-center justify-between mb-4">
-                  <div className="w-12 h-12 bg-violet-500/15 rounded-2xl flex items-center justify-center">
-                    <Bot className="w-6 h-6 text-violet-400" />
+                  <div className="w-12 h-12 bg-emerald-500/15 dark:bg-purple-500/20 rounded-2xl flex items-center justify-center">
+                    <Bot className="w-6 h-6 text-emerald-600 dark:text-purple-300" />
                   </div>
-                  <ArrowRight className="w-5 h-5 text-gray-600 group-hover:text-violet-400 transition-colors" />
+                  <ArrowRight className="w-5 h-5 text-emerald-400 dark:text-purple-400/70 group-hover:text-emerald-600 dark:group-hover:text-purple-300 transition-colors" />
                 </div>
-                <h3 className="text-white mb-2" style={{ fontSize: "1.05rem", fontWeight: 700 }}>{bot.name}</h3>
-                <p className="text-gray-500" style={{ fontSize: "0.8rem" }}>
+                <h3 className="text-gray-900 dark:text-purple-100 mb-2" style={{ fontSize: "1.05rem", fontWeight: 700 }}>{bot.name}</h3>
+                <p className="text-emerald-800/80 dark:text-purple-300/70" style={{ fontSize: "0.8rem" }}>
                   {bot.description?.trim() || "No description configured"}
                 </p>
 
@@ -165,7 +165,7 @@ export function ChatbotSelectionPage() {
                       localStorage.setItem("activeChatbotId", bot.id);
                       navigate(`/app/chat/${bot.id}/manage`);
                     }}
-                    className="px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 rounded-lg"
+                    className="px-3 py-1.5 bg-emerald-100 hover:bg-emerald-200 border border-emerald-300 text-emerald-800 dark:bg-purple-500/15 dark:hover:bg-purple-500/25 dark:border-purple-500/35 dark:text-purple-200 dark:hover:text-purple-100 rounded-lg transition-colors"
                     style={{ fontSize: "0.72rem", fontWeight: 600 }}
                   >
                     Manage
@@ -183,26 +183,26 @@ export function ChatbotSelectionPage() {
               if (e.target === e.currentTarget && !creating) setShowCreateModal(false);
             }}
           >
-            <div className="w-full max-w-md bg-[#15151f] border border-white/10 rounded-3xl p-6 shadow-2xl">
+            <div className="w-full max-w-md bg-white dark:bg-[#111019] border border-emerald-100 dark:border-purple-500/25 rounded-3xl p-6 shadow-2xl">
               <div className="flex items-center gap-3 mb-5">
-                <div className="w-11 h-11 bg-violet-500/15 rounded-xl flex items-center justify-center">
-                  <Bot className="w-5 h-5 text-violet-400" />
+                <div className="w-11 h-11 bg-emerald-500/15 dark:bg-purple-500/20 rounded-xl flex items-center justify-center">
+                  <Bot className="w-5 h-5 text-emerald-600 dark:text-purple-300" />
                 </div>
                 <div>
-                  <h3 className="text-white" style={{ fontSize: "1.05rem", fontWeight: 700 }}>Create Chatbot</h3>
-                  <p className="text-gray-500" style={{ fontSize: "0.75rem" }}>Set up a new assistant workspace</p>
+                  <h3 className="text-gray-900 dark:text-purple-100" style={{ fontSize: "1.05rem", fontWeight: 700 }}>Create Chatbot</h3>
+                  <p className="text-emerald-700/80 dark:text-purple-300/70" style={{ fontSize: "0.75rem" }}>Set up a new assistant workspace</p>
                 </div>
               </div>
 
               <div className="space-y-4">
                 <div>
-                  <label className="text-gray-400 block mb-1.5" style={{ fontSize: "0.75rem" }}>Chatbot Name</label>
+                  <label className="text-emerald-800 dark:text-purple-200 block mb-1.5" style={{ fontSize: "0.75rem" }}>Chatbot Name</label>
                   <input
                     type="text"
                     value={newChatbotName}
                     onChange={(e) => setNewChatbotName(e.target.value)}
                     placeholder="Enter chatbot name"
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-white placeholder-gray-600 focus:outline-none focus:border-violet-500/50"
+                    className="w-full bg-white dark:bg-[#1a1627] border border-emerald-300 dark:border-purple-500/35 rounded-xl px-3 py-2.5 text-gray-900 dark:text-purple-100 placeholder-emerald-500/70 dark:placeholder-purple-300/50 focus:outline-none focus:border-emerald-500 dark:focus:border-purple-400"
                     style={{ fontSize: "0.85rem" }}
                   />
                 </div>
@@ -214,7 +214,7 @@ export function ChatbotSelectionPage() {
                   type="button"
                   disabled={creating}
                   onClick={() => setShowCreateModal(false)}
-                  className="px-4 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 rounded-xl transition-all"
+                  className="px-4 py-2.5 bg-emerald-100 hover:bg-emerald-200 border border-emerald-300 text-emerald-900 dark:bg-purple-500/15 dark:hover:bg-purple-500/25 dark:border-purple-500/35 dark:text-purple-200 rounded-xl transition-all"
                   style={{ fontSize: "0.82rem", fontWeight: 600 }}
                 >
                   Cancel
@@ -223,7 +223,7 @@ export function ChatbotSelectionPage() {
                   type="button"
                   disabled={!newChatbotName.trim() || creating}
                   onClick={handleCreateChatbot}
-                  className="px-4 py-2.5 bg-gradient-to-r from-violet-500 to-indigo-600 hover:from-violet-600 hover:to-indigo-700 disabled:opacity-50 text-white rounded-xl transition-all"
+                  className="px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-green-700 hover:from-emerald-700 hover:to-green-800 dark:from-purple-600 dark:to-fuchsia-700 dark:hover:from-purple-700 dark:hover:to-fuchsia-800 disabled:opacity-50 text-white rounded-xl transition-all"
                   style={{ fontSize: "0.82rem", fontWeight: 700 }}
                 >
                   {creating ? "Creating..." : "Create Chatbot"}

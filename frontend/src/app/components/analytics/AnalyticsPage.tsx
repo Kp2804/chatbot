@@ -101,21 +101,21 @@ export function AnalyticsPage() {
   };
 
   return (
-    <div className="h-full overflow-y-auto bg-[#08080c]">
+    <div className="h-full overflow-y-auto bg-gray-50 dark:bg-[#08080c]">
       <div className="max-w-6xl mx-auto p-10">
         <div className="flex items-center justify-between mb-10">
           <div>
-            <h1 className="text-white mb-2 leading-none" style={{ fontSize: "2.5rem", fontWeight: 900, letterSpacing: "-0.03em" }}>
+            <h1 className="text-gray-900 dark:text-white mb-2 leading-none" style={{ fontSize: "2.5rem", fontWeight: 900, letterSpacing: "-0.03em" }}>
               Analysis
             </h1>
-            <p className="text-gray-500 font-bold uppercase tracking-[0.2em]" style={{ fontSize: "0.7rem" }}>
+            <p className="text-gray-500 dark:text-gray-500 font-bold uppercase tracking-[0.2em]" style={{ fontSize: "0.7rem" }}>
               Live platform metrics
             </p>
           </div>
           <button
             type="button"
             onClick={fetchAnalytics}
-            className="flex items-center gap-2 px-4 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-gray-300 hover:text-white transition-all"
+            className="flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-white/5 hover:bg-gray-100 dark:hover:bg-white/10 border border-gray-200 dark:border-white/10 rounded-xl text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-white transition-all"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
             Refresh
@@ -123,42 +123,42 @@ export function AnalyticsPage() {
         </div>
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
-          <div className="bg-white/[0.02] border border-white/5 rounded-[1.8rem] p-6">
+          <div className="bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/5 rounded-[1.8rem] p-6">
             <div className="w-10 h-10 rounded-xl bg-violet-500/10 text-violet-400 flex items-center justify-center mb-4">
               <MessageSquare className="w-5 h-5" />
             </div>
-            <div className="text-white" style={{ fontSize: "2rem", fontWeight: 900 }}>{totalChats}</div>
-            <div className="text-gray-500 font-bold uppercase tracking-widest" style={{ fontSize: "0.62rem" }}>Total Chats</div>
+            <div className="text-gray-900 dark:text-white" style={{ fontSize: "2rem", fontWeight: 900 }}>{totalChats}</div>
+            <div className="text-gray-500 dark:text-gray-300 font-bold uppercase tracking-widest" style={{ fontSize: "0.62rem" }}>Total Chats</div>
           </div>
 
-          <div className="bg-white/[0.02] border border-white/5 rounded-[1.8rem] p-6">
+          <div className="bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/5 rounded-[1.8rem] p-6">
             <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center mb-4">
               <CheckCircle2 className="w-5 h-5" />
             </div>
-            <div className="text-white" style={{ fontSize: "2rem", fontWeight: 900 }}>{resolvedRate}%</div>
-            <div className="text-gray-500 font-bold uppercase tracking-widest" style={{ fontSize: "0.62rem" }}>Resolved Rate</div>
-            <div className="text-gray-600 mt-1" style={{ fontSize: "0.72rem" }}>{resolvedCount} resolved chats</div>
+            <div className="text-gray-900 dark:text-white" style={{ fontSize: "2rem", fontWeight: 900 }}>{resolvedRate}%</div>
+            <div className="text-gray-500 dark:text-gray-300 font-bold uppercase tracking-widest" style={{ fontSize: "0.62rem" }}>Resolved Rate</div>
+            <div className="text-gray-600 dark:text-gray-400 mt-1" style={{ fontSize: "0.72rem" }}>{resolvedCount} resolved chats</div>
           </div>
 
-          <div className="bg-white/[0.02] border border-white/5 rounded-[1.8rem] p-6">
+          <div className="bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/5 rounded-[1.8rem] p-6">
             <div className="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center mb-4">
               <GitBranch className="w-5 h-5" />
             </div>
-            <div className="text-white" style={{ fontSize: "2rem", fontWeight: 900 }}>{workflowCount}</div>
-            <div className="text-gray-500 font-bold uppercase tracking-widest" style={{ fontSize: "0.62rem" }}>Workflows</div>
+            <div className="text-gray-900 dark:text-white" style={{ fontSize: "2rem", fontWeight: 900 }}>{workflowCount}</div>
+            <div className="text-gray-500 dark:text-gray-300 font-bold uppercase tracking-widest" style={{ fontSize: "0.62rem" }}>Workflows</div>
           </div>
 
-          <div className="bg-white/[0.02] border border-white/5 rounded-[1.8rem] p-6">
+          <div className="bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/5 rounded-[1.8rem] p-6">
             <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center mb-4">
               <HelpCircle className="w-5 h-5" />
             </div>
-            <div className="text-white" style={{ fontSize: "2rem", fontWeight: 900 }}>{publishedFaqCount}</div>
-            <div className="text-gray-500 font-bold uppercase tracking-widest" style={{ fontSize: "0.62rem" }}>Published FAQs</div>
+            <div className="text-gray-900 dark:text-white" style={{ fontSize: "2rem", fontWeight: 900 }}>{publishedFaqCount}</div>
+            <div className="text-gray-500 dark:text-gray-300 font-bold uppercase tracking-widest" style={{ fontSize: "0.62rem" }}>Published FAQs</div>
           </div>
         </div>
 
-        <div className="bg-white/[0.02] border border-white/5 rounded-[2rem] p-8">
-          <p className="text-gray-400" style={{ fontSize: "0.9rem" }}>
+        <div className="bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/5 rounded-[2rem] p-8">
+          <p className="text-gray-600 dark:text-gray-300" style={{ fontSize: "0.9rem" }}>
             Metrics are calculated from all-time Supabase data. "Resolved" is based on conversations that have at least one assistant response.
           </p>
         </div>

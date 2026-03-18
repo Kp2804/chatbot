@@ -78,6 +78,61 @@
   --sidebar-ring: oklch(0.439 0 0);
 }
 
+/*
+ * Light mode accent remap:
+ * convert violet/indigo utility colors to green while leaving dark mode untouched.
+ */
+:root:not(.dark) {
+  --color-violet-50: #ecfdf5;
+  --color-violet-100: #d1fae5;
+  --color-violet-200: #a7f3d0;
+  --color-violet-300: #6ee7b7;
+  --color-violet-400: #34d399;
+  --color-violet-500: #10b981;
+  --color-violet-600: #059669;
+  --color-violet-700: #047857;
+  --color-violet-800: #065f46;
+  --color-violet-900: #064e3b;
+  --color-violet-950: #022c22;
+
+  --color-indigo-50: #ecfdf5;
+  --color-indigo-100: #d1fae5;
+  --color-indigo-200: #a7f3d0;
+  --color-indigo-300: #6ee7b7;
+  --color-indigo-400: #34d399;
+  --color-indigo-500: #10b981;
+  --color-indigo-600: #059669;
+  --color-indigo-700: #047857;
+  --color-indigo-800: #065f46;
+  --color-indigo-900: #064e3b;
+  --color-indigo-950: #022c22;
+}
+
+/* Ensure maximum readability in light mode across existing screens. */
+:root:not(.dark) body,
+:root:not(.dark) h1,
+:root:not(.dark) h2,
+:root:not(.dark) h3,
+:root:not(.dark) h4,
+:root:not(.dark) h5,
+:root:not(.dark) h6,
+:root:not(.dark) p,
+:root:not(.dark) span,
+:root:not(.dark) label,
+:root:not(.dark) li,
+:root:not(.dark) a,
+:root:not(.dark) small,
+:root:not(.dark) strong,
+:root:not(.dark) em,
+:root:not(.dark) td,
+:root:not(.dark) th,
+:root:not(.dark) input,
+:root:not(.dark) textarea,
+:root:not(.dark) select,
+:root:not(.dark) button {
+  color: #000 !important;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

@@ -51,7 +51,7 @@ export function PricingCard({ plan, isCurrentPlan, isProcessing, onUpgrade }: Pr
         type="button"
         onClick={() => onUpgrade(plan)}
         disabled={isCurrentPlan || isProcessing}
-        className="w-full rounded-xl bg-black text-white dark:bg-white dark:text-black py-2.5 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+        className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white dark:bg-purple-600 dark:hover:bg-purple-700 dark:text-white py-2.5 font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
       >
         {isCurrentPlan ? "Current Plan" : isProcessing ? "Starting checkout..." : "Upgrade"}
       </button>

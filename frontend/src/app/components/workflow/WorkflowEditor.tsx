@@ -239,12 +239,12 @@ function VisualFlowCanvas({
             >
                 <defs>
                     <linearGradient id="edgeGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                        <stop offset="0%" stopColor="#8b5cf6" stopOpacity="0.4" />
-                        <stop offset="50%" stopColor="#d946ef" stopOpacity="0.6" />
-                        <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0.4" />
+                        <stop offset="0%" stopColor="#10b981" stopOpacity="0.4" />
+                        <stop offset="50%" stopColor="#10b981" stopOpacity="0.6" />
+                        <stop offset="100%" stopColor="#10b981" stopOpacity="0.4" />
                     </linearGradient>
                     <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-                        <polygon points="0 0, 10 3.5, 0 7" fill="#8b5cf6" />
+                        <polygon points="0 0, 10 3.5, 0 7" fill="#10b981" />
                     </marker>
                     <marker id="arrowhead-selected" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
                         <polygon points="0 0, 10 3.5, 0 7" fill="#f87171" />
@@ -281,7 +281,7 @@ function VisualFlowCanvas({
                             <path
                                 d={d}
                                 fill="none"
-                                stroke={isSelected ? '#f87171' : 'url(#edgeGradient)'}
+                                stroke={isSelected ? '#ef4444' : 'url(#edgeGradient)'}
                                 strokeWidth={isSelected ? 2.5 : 2}
                                 markerEnd={isSelected ? 'url(#arrowhead-selected)' : 'url(#arrowhead)'}
                             />
@@ -303,7 +303,7 @@ function VisualFlowCanvas({
                         <path
                             d={`M ${x1} ${y1} C ${x1} ${cp1y}, ${x2} ${cp2y}, ${x2} ${y2}`}
                             fill="none"
-                            stroke="#8b5cf6"
+                            stroke="#10b981"
                             strokeWidth="2"
                             strokeOpacity="0.8"
                             strokeDasharray="4,4"
@@ -319,8 +319,8 @@ function VisualFlowCanvas({
     return (
         <div
             ref={canvasRef}
-            className="flex-1 w-full h-full bg-gray-100 dark:bg-[#08080c] relative overflow-hidden select-none cursor-grab active:cursor-grabbing"
-            style={{ backgroundImage: 'radial-gradient(circle, rgba(139,92,246,0.08) 1px, transparent 1px)', backgroundSize: '50px 50px' }}
+            className="flex-1 w-full h-full bg-white dark:bg-[#08080c] relative overflow-hidden select-none cursor-grab active:cursor-grabbing"
+            style={{ backgroundImage: 'radial-gradient(circle, rgba(139,92,246,0.08) 1px, transparent 1px), radial-gradient(circle, rgba(139,92,246,0.04) 1px, transparent 1px)', backgroundSize: '50px 50px, 50px 50px', backgroundPosition: '0 0, 25px 25px' }}
             onWheel={handleWheel}
             onMouseDown={handleCanvasMouseDown}
             onTouchStart={handleTouchStart}
@@ -361,12 +361,12 @@ function VisualFlowCanvas({
                             }}
                             initial={node.position}
                             animate={{ x: node.position?.x, y: node.position?.y }}
-                            className={`absolute w-[140px] bg-[#16161e] border-2 rounded-xl shadow-xl cursor-grab active:cursor-grabbing transition-colors z-10 p-0
+                            className={`absolute w-[140px] bg-white dark:bg-[#111019] border-2 rounded-xl shadow-xl cursor-grab active:cursor-grabbing transition-colors z-10 p-0
                                 ${isSelectedNode
-                                    ? 'border-violet-400 shadow-[0_0_20px_rgba(139,92,246,0.35)]'
+                                    ? 'border-emerald-500 dark:border-purple-500 shadow-[0_0_20px_rgba(16,185,129,0.35)] dark:shadow-[0_0_20px_rgba(168,85,247,0.35)]'
                                     : node.type === 'trigger'
-                                        ? 'border-amber-500/40 hover:border-violet-600/50'
-                                        : 'border-white/10 hover:border-violet-600/50'
+                                        ? 'border-amber-500/40 hover:border-emerald-600/50 dark:hover:border-purple-500/50'
+                                        : 'border-emerald-200 dark:border-purple-500/30 hover:border-emerald-600/50 dark:hover:border-purple-500/50'
                                 }`}
                             onMouseDown={(e) => {
                                 // stop so the canvas pan doesn't start
@@ -391,7 +391,7 @@ function VisualFlowCanvas({
                         >
                             {node.type !== 'trigger' && (
                                 <div
-                                    className="absolute top-[-8px] left-1/2 transform -translate-x-1/2 w-4 h-4 bg-violet-600 rounded-full border-2 border-gray-100 dark:border-[#08080c] cursor-pointer hover:scale-125 transition-transform z-20 shadow-[0_0_10px_rgba(139,92,246,0.5)] flex items-center justify-center group"
+                                    className="absolute top-[-8px] left-1/2 transform -translate-x-1/2 w-4 h-4 bg-emerald-600 dark:bg-purple-600 rounded-full border-2 border-emerald-100 dark:border-purple-200/60 cursor-pointer hover:scale-125 transition-transform z-20 shadow-[0_0_10px_rgba(16,185,129,0.6)] dark:shadow-[0_0_10px_rgba(168,85,247,0.6)] flex items-center justify-center group"
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         if (connectingSource && connectingSource !== node.id) {
@@ -404,13 +404,13 @@ function VisualFlowCanvas({
                                 </div>
                             )}
 
-                            <div className="flex items-center justify-between p-2.5 bg-gray-100 dark:bg-black/20 rounded-t-2xl">
+                            <div className="flex items-center justify-between p-2.5 bg-emerald-50 dark:bg-[#1a1627] rounded-t-2xl">
                                 <div className="flex items-center gap-1.5">
-                                    <span className="text-[0.55rem] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest">{node.type === 'trigger' ? 'TRIGGER' : 'ACTION'}</span>
+                                    <span className="text-[0.55rem] font-black text-emerald-700/80 dark:text-purple-300/80 uppercase tracking-widest">{node.type === 'trigger' ? 'TRIGGER' : 'ACTION'}</span>
                                     {node.type === 'trigger' && <Zap className="w-2.5 h-2.5 text-amber-500" />}
                                 </div>
                                 {node.type !== 'trigger' && (
-                                    <button type="button" onClick={(e) => { e.stopPropagation(); removeNode(node.id); }} className="text-gray-600 hover:text-red-400 transition-colors">
+                                    <button type="button" onClick={(e) => { e.stopPropagation(); removeNode(node.id); }} className="text-emerald-800 dark:text-purple-300 hover:text-red-400 transition-colors">
                                         <Icons.Trash2 className="w-3.5 h-3.5" />
                                     </button>
                                 )}
@@ -418,36 +418,36 @@ function VisualFlowCanvas({
 
                             <div className="p-3 space-y-4">
                                 <div className="space-y-1">
-                                    <label className="text-[0.55rem] font-black text-gray-400 dark:text-gray-600 uppercase tracking-widest block">{node.type === 'trigger' ? 'Trigger Label' : 'Button Name'}</label>
+                                    <label className="text-[0.55rem] font-black text-emerald-700/80 dark:text-purple-300/80 uppercase tracking-widest block">{node.type === 'trigger' ? 'Trigger Label' : 'Button Name'}</label>
                                     <input
                                         type="text"
                                         value={node.name}
                                         onChange={(e) => updateNode(node.id, { name: e.target.value })}
-                                        className="w-full bg-gray-100 dark:bg-white/5 border border-gray-200 dark:border-white/5 rounded-xl px-3 py-1.5 text-gray-900 dark:text-white font-bold text-xs focus:outline-none focus:border-violet-500/30 transition-all font-outfit"
+                                        className="w-full bg-white dark:bg-[#141222] border border-emerald-200 dark:border-purple-500/35 rounded-xl px-3 py-1.5 text-gray-900 dark:text-purple-100 font-bold text-xs focus:outline-none focus:border-emerald-500/50 dark:focus:border-purple-500/50 transition-all font-outfit"
                                     />
                                 </div>
 
                                 <div className="space-y-1">
-                                    <label className="text-[0.55rem] font-black text-gray-400 dark:text-gray-600 uppercase tracking-widest block">Bot Message</label>
+                                    <label className="text-[0.55rem] font-black text-emerald-700/80 dark:text-purple-300/80 uppercase tracking-widest block">Bot Message</label>
                                     <textarea
                                         value={node.message}
                                         onChange={(e) => updateNode(node.id, { message: e.target.value })}
-                                        className="w-full bg-gray-50 dark:bg-black/40 border border-gray-200 dark:border-white/5 rounded-xl p-3 text-gray-900 dark:text-white text-[0.7rem] font-medium focus:outline-none focus:border-violet-500/30 resize-none h-16 leading-tight scrollbar-hide"
+                                        className="w-full bg-white dark:bg-[#141222] border border-emerald-200 dark:border-purple-500/35 rounded-xl p-3 text-gray-900 dark:text-purple-100 text-[0.7rem] font-medium focus:outline-none focus:border-emerald-500/50 dark:focus:border-purple-500/50 resize-none h-16 leading-tight scrollbar-hide"
                                     />
                                 </div>
 
                                 <div className="pt-1">
                                     <div className="flex items-center justify-between mb-1.5">
-                                        <span className="text-[0.55rem] font-black text-gray-400 dark:text-gray-600 uppercase tracking-widest">Paths</span>
-                                        <span className="text-[0.55rem] font-bold text-violet-400">{edges.filter(e => e.source === node.id).length}</span>
+                                        <span className="text-[0.55rem] font-black text-emerald-700/80 dark:text-purple-300/80 uppercase tracking-widest">Paths</span>
+                                        <span className="text-[0.55rem] font-bold text-emerald-600 dark:text-purple-400">{edges.filter(e => e.source === node.id).length}</span>
                                     </div>
                                     <div className="flex flex-wrap gap-1">
                                         {edges.filter(e => e.source === node.id).map(edge => {
                                             const target = nodes.find(n => n.id === edge.target);
                                             return (
-                                                <div key={edge.id} className="group relative flex items-center gap-1 px-2 py-1 bg-gray-100 dark:bg-white/5 rounded-lg border border-gray-200 dark:border-white/5">
-                                                    <span className="text-[0.5rem] font-bold text-gray-500 dark:text-gray-400 truncate max-w-[60px]">{target?.name || 'End'}</span>
-                                                    <button onClick={(e) => { e.stopPropagation(); removeEdge(edge.id); }} className="text-gray-700 hover:text-red-400 transition-colors">
+                                                <div key={edge.id} className="group relative flex items-center gap-1 px-2 py-1 bg-emerald-50 dark:bg-[#1a1627] rounded-lg border border-emerald-200 dark:border-purple-500/35">
+                                                    <span className="text-[0.5rem] font-bold text-emerald-800 dark:text-purple-200 truncate max-w-[60px]">{target?.name || 'End'}</span>
+                                                    <button onClick={(e) => { e.stopPropagation(); removeEdge(edge.id); }} className="text-emerald-700 dark:text-purple-300 hover:text-red-400 transition-colors">
                                                         <Icons.X className="w-2 h-2" />
                                                     </button>
                                                 </div>
@@ -458,7 +458,7 @@ function VisualFlowCanvas({
                             </div>
 
                             <div
-                                className="absolute bottom-[-8px] left-1/2 transform -translate-x-1/2 w-4 h-4 bg-violet-600 rounded-full border-2 border-gray-100 dark:border-[#08080c] cursor-pointer hover:scale-125 transition-transform z-20 shadow-[0_0_10px_rgba(139,92,246,0.5)] flex items-center justify-center group"
+                                className="absolute bottom-[-8px] left-1/2 transform -translate-x-1/2 w-4 h-4 bg-emerald-600 dark:bg-purple-600 rounded-full border-2 border-emerald-100 dark:border-purple-200/60 cursor-pointer hover:scale-125 transition-transform z-20 shadow-[0_0_10px_rgba(16,185,129,0.6)] dark:shadow-[0_0_10px_rgba(168,85,247,0.6)] flex items-center justify-center group"
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     setConnectingSource(node.id);
@@ -473,16 +473,16 @@ function VisualFlowCanvas({
 
             {/* Zoom Controls */}
             <div className="absolute bottom-10 left-10 flex flex-col gap-2 z-50">
-                <button onClick={() => setViewState(v => ({ ...v, zoom: Math.min(v.zoom + 0.1, 2) }))} className="w-10 h-10 bg-white dark:bg-[#16161c] border border-gray-200 dark:border-white/10 rounded-xl flex items-center justify-center text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-all shadow-xl">
+                <button onClick={() => setViewState(v => ({ ...v, zoom: Math.min(v.zoom + 0.1, 2) }))} className="w-10 h-10 bg-white dark:bg-[#141222] border border-emerald-200 dark:border-purple-500/35 rounded-xl flex items-center justify-center text-emerald-700 dark:text-purple-300 hover:text-emerald-900 dark:hover:text-purple-100 transition-all shadow-xl">
                     <Icons.Plus className="w-5 h-5" />
                 </button>
-                <div className="w-10 h-10 bg-white dark:bg-[#16161c] border border-gray-200 dark:border-white/10 rounded-xl flex items-center justify-center text-[0.6rem] font-black text-gray-400 dark:text-gray-500">
+                <div className="w-10 h-10 bg-white dark:bg-[#141222] border border-emerald-200 dark:border-purple-500/35 rounded-xl flex items-center justify-center text-[0.6rem] font-black text-emerald-700/80 dark:text-purple-300/80">
                     {Math.round(viewState.zoom * 100)}%
                 </div>
-                <button onClick={() => setViewState(v => ({ ...v, zoom: Math.max(v.zoom - 0.1, 0.2) }))} className="w-10 h-10 bg-white dark:bg-[#16161c] border border-gray-200 dark:border-white/10 rounded-xl flex items-center justify-center text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-all shadow-xl">
+                <button onClick={() => setViewState(v => ({ ...v, zoom: Math.max(v.zoom - 0.1, 0.2) }))} className="w-10 h-10 bg-white dark:bg-[#141222] border border-emerald-200 dark:border-purple-500/35 rounded-xl flex items-center justify-center text-emerald-700 dark:text-purple-300 hover:text-emerald-900 dark:hover:text-purple-100 transition-all shadow-xl">
                     <Icons.Minus className="w-5 h-5" />
                 </button>
-                <button onClick={() => setViewState({ x: 0, y: 0, zoom: 1 })} className="w-10 h-10 bg-white dark:bg-[#16161c] border border-gray-200 dark:border-white/10 rounded-xl flex items-center justify-center text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-all shadow-xl mt-2">
+                <button onClick={() => setViewState({ x: 0, y: 0, zoom: 1 })} className="w-10 h-10 bg-white dark:bg-[#141222] border border-emerald-200 dark:border-purple-500/35 rounded-xl flex items-center justify-center text-emerald-700 dark:text-purple-300 hover:text-emerald-900 dark:hover:text-purple-100 transition-all shadow-xl mt-2">
                     <Icons.Maximize className="w-5 h-5" />
                 </button>
             </div>
@@ -491,21 +491,21 @@ function VisualFlowCanvas({
             <button
                 type="button"
                 onClick={() => addNode(viewState, canvasRef.current)}
-                className="absolute bottom-10 right-10 w-20 h-20 bg-gradient-to-br from-violet-600 to-indigo-700 hover:scale-110 active:scale-95 rounded-[2rem] flex items-center justify-center text-white shadow-3xl shadow-violet-600/30 z-50 transition-all duration-300"
+                className="absolute bottom-10 right-10 w-20 h-20 bg-gradient-to-br from-emerald-500 to-emerald-600 dark:from-violet-600 dark:to-indigo-700 hover:from-emerald-600 hover:to-emerald-700 dark:hover:from-violet-500 dark:hover:to-indigo-600 hover:scale-110 active:scale-95 rounded-[2rem] flex items-center justify-center text-white shadow-3xl shadow-emerald-600/30 dark:shadow-violet-600/30 z-50 transition-all duration-300"
             >
                 <Icons.Plus className="w-10 h-10" />
             </button>
 
             {/* Selected hint */}
             {selectedId && (
-                <div className="absolute top-4 left-1/2 transform -translate-x-1/2 px-5 py-2.5 bg-white/90 dark:bg-[#16161c]/90 backdrop-blur-md rounded-full text-gray-600 dark:text-gray-300 font-bold text-xs uppercase tracking-[0.15em] shadow-xl z-[100] flex items-center gap-2 border border-gray-200 dark:border-white/10">
+                <div className="absolute top-4 left-1/2 transform -translate-x-1/2 px-5 py-2.5 bg-white/90 dark:bg-[#1a1627]/95 backdrop-blur-md rounded-full text-emerald-700 dark:text-purple-200 font-bold text-xs uppercase tracking-[0.15em] shadow-xl z-[100] flex items-center gap-2 border border-emerald-200 dark:border-purple-500/35">
                     <Icons.Trash2 className="w-3.5 h-3.5 text-red-400" />
-                    Press <kbd className="px-1.5 py-0.5 bg-gray-200 dark:bg-white/10 rounded text-gray-900 dark:text-white">Delete</kbd> to remove selected {selectedType}
+                    Press <kbd className="px-1.5 py-0.5 bg-emerald-100 dark:bg-[#251f36] rounded text-emerald-900 dark:text-purple-100">Delete</kbd> to remove selected {selectedType}
                 </div>
             )}
 
             {connectingSource && (
-                <div className="absolute top-10 left-1/2 transform -translate-x-1/2 px-8 py-4 bg-violet-600/90 backdrop-blur-md rounded-full text-white font-black text-xs uppercase tracking-[0.2em] shadow-2xl z-[100] animate-bounce">
+                <div className="absolute top-10 left-1/2 transform -translate-x-1/2 px-8 py-4 bg-emerald-600/90 dark:bg-violet-600/90 backdrop-blur-md rounded-full text-white font-black text-xs uppercase tracking-[0.2em] shadow-2xl z-[100] animate-bounce">
                     Release over target node to connect
                 </div>
             )}
@@ -521,43 +521,43 @@ function WorkflowVisualPreview({
     edges: WorkflowEdge[];
 }) {
     return (
-        <div className="h-full overflow-y-auto bg-gray-50 dark:bg-[#08080c] p-8">
+        <div className="h-full overflow-y-auto bg-white dark:bg-[#08080c] p-8">
             <div className="flex items-center justify-between mb-6 px-1">
-                <h4 className="text-gray-900 dark:text-white font-black uppercase tracking-[0.24em] text-[0.65rem]">Flow Structure</h4>
-                <p className="text-gray-400 dark:text-gray-600 text-xs font-bold uppercase tracking-widest">Visual Preview</p>
+                <h4 className="text-gray-900 dark:text-purple-100 font-black uppercase tracking-[0.24em] text-[0.65rem]">Flow Structure</h4>
+                <p className="text-emerald-700/70 dark:text-purple-300/70 text-xs font-bold uppercase tracking-widest">Visual Preview</p>
             </div>
 
             <div className="flex gap-6 overflow-x-auto pb-10 snap-x snap-mandatory no-scrollbar scroll-smooth">
                 {nodes.map((node, index) => (
                     <div key={node.id} className="flex-shrink-0 w-80 snap-center">
-                        <div className="bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/10 rounded-[2.5rem] p-6 hover:border-violet-500/40 transition-all duration-700 transform hover:-translate-y-1.5 group/node">
+                        <div className="bg-white dark:bg-[#111019] border border-emerald-200 dark:border-purple-500/30 rounded-[2.5rem] p-6 hover:border-emerald-500/40 dark:hover:border-purple-500/50 transition-all duration-700 transform hover:-translate-y-1.5 group/node">
                             <div className="flex items-center justify-between mb-6">
-                                <span className="text-[0.6rem] font-black text-gray-400 dark:text-gray-800 uppercase tracking-widest leading-none">
+                                <span className="text-[0.6rem] font-black text-emerald-700/80 dark:text-purple-300/80 uppercase tracking-widest leading-none">
                                     {node.type === 'trigger' ? 'TRIGGER' : `NODE: ${index.toString().padStart(2, '0')}`}
                                 </span>
-                                <div className="w-10 h-10 rounded-2xl bg-gray-100 dark:bg-white/5 flex items-center justify-center group-hover/node:rotate-12 transition-transform">
-                                    <Icons.MessageSquare className="w-5 h-5 text-violet-500/70" />
+                                <div className="w-10 h-10 rounded-2xl bg-emerald-50 dark:bg-[#1a1627] flex items-center justify-center group-hover/node:rotate-12 transition-transform">
+                                    <Icons.MessageSquare className="w-5 h-5 text-emerald-600 dark:text-purple-400" />
                                 </div>
                             </div>
 
-                            <h6 className="text-gray-900 dark:text-white font-black mb-3 truncate pr-4 text-base tracking-tight">{node.name || 'Untitled Node'}</h6>
-                            <p className="text-gray-500 text-xs line-clamp-3 mb-6 leading-relaxed font-medium">{node.message || 'No message configured.'}</p>
+                            <h6 className="text-gray-900 dark:text-purple-100 font-black mb-3 truncate pr-4 text-base tracking-tight">{node.name || 'Untitled Node'}</h6>
+                            <p className="text-emerald-800/75 dark:text-purple-300/75 text-xs line-clamp-3 mb-6 leading-relaxed font-medium">{node.message || 'No message configured.'}</p>
 
                             <div className="space-y-2">
                                 {edges.filter((edge) => edge.source === node.id).map((edge) => {
                                     const targetNode = nodes.find((item) => item.id === edge.target);
                                     return (
-                                        <div key={edge.id} className="flex items-center justify-between px-4 py-2.5 bg-gray-50 dark:bg-black/40 rounded-2xl border border-gray-200 dark:border-white/5 group/opt">
-                                            <span className="text-[0.65rem] font-bold text-gray-500 truncate group-hover/opt:text-gray-900 dark:group-hover/opt:text-white transition-colors">
+                                        <div key={edge.id} className="flex items-center justify-between px-4 py-2.5 bg-emerald-50 dark:bg-[#1a1627] rounded-2xl border border-emerald-200 dark:border-purple-500/35 group/opt">
+                                            <span className="text-[0.65rem] font-bold text-emerald-800 dark:text-purple-200 truncate group-hover/opt:text-emerald-900 dark:group-hover/opt:text-purple-100 transition-colors">
                                                 {targetNode?.name || 'End'}
                                             </span>
-                                            <ArrowRight className="w-3.5 h-3.5 text-violet-600/30 group-hover/opt:text-violet-600 transition-colors" />
+                                            <ArrowRight className="w-3.5 h-3.5 text-emerald-600/40 dark:text-purple-500/50 group-hover/opt:text-emerald-600 dark:group-hover/opt:text-purple-400 transition-colors" />
                                         </div>
                                     );
                                 })}
 
                                 {!edges.some((edge) => edge.source === node.id) && (
-                                    <div className="text-center py-3 text-gray-300 dark:text-gray-800 text-[0.6rem] font-black uppercase tracking-[0.2em]">End of Flow</div>
+                                    <div className="text-center py-3 text-emerald-300 dark:text-purple-400/50 text-[0.6rem] font-black uppercase tracking-[0.2em]">End of Flow</div>
                                 )}
                             </div>
                         </div>
@@ -566,8 +566,8 @@ function WorkflowVisualPreview({
             </div>
 
             {nodes.length === 0 && (
-                <div className="rounded-3xl border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.02] p-10 text-center">
-                    <p className="text-gray-500 text-sm font-medium">No nodes to preview yet.</p>
+                <div className="rounded-3xl border border-emerald-200 dark:border-purple-500/35 bg-white dark:bg-[#111019] p-10 text-center">
+                    <p className="text-emerald-800 dark:text-purple-200 text-sm font-medium">No nodes to preview yet.</p>
                 </div>
             )}
         </div>
@@ -590,18 +590,18 @@ function WorkflowSimulation({
     onSelectOption: (edgeId: string) => void;
 }) {
     return (
-        <div className="h-full overflow-y-auto bg-gray-50 dark:bg-[#08080c] p-8">
+        <div className="h-full overflow-y-auto bg-white dark:bg-[#08080c] p-8">
             <div className="flex items-center justify-between mb-6">
                 <div>
-                    <h4 className="text-gray-900 dark:text-white font-black uppercase tracking-[0.24em] text-[0.65rem]">Simulation</h4>
-                    <p className="text-gray-400 dark:text-gray-600 text-xs font-bold uppercase tracking-widest mt-1">Test your flow before saving</p>
+                    <h4 className="text-gray-900 dark:text-purple-100 font-black uppercase tracking-[0.24em] text-[0.65rem]">Simulation</h4>
+                    <p className="text-emerald-700/70 dark:text-purple-300/70 text-xs font-bold uppercase tracking-widest mt-1">Test your flow before saving</p>
                 </div>
                 <div className="flex items-center gap-2">
                     {!running ? (
                         <button
                             type="button"
                             onClick={onStart}
-                            className="px-4 py-2.5 bg-violet-600 hover:bg-violet-500 text-white rounded-xl font-bold text-xs uppercase tracking-wider flex items-center gap-2"
+                            className="px-4 py-2.5 bg-emerald-600 dark:bg-purple-600 hover:bg-emerald-500 dark:hover:bg-purple-500 text-white rounded-xl font-bold text-xs uppercase tracking-wider flex items-center gap-2"
                         >
                             <Icons.Play className="w-4 h-4" /> Start
                         </button>
@@ -609,7 +609,7 @@ function WorkflowSimulation({
                         <button
                             type="button"
                             onClick={onReset}
-                            className="px-4 py-2.5 bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 border border-gray-200 dark:border-white/10 text-gray-600 dark:text-gray-300 rounded-xl font-bold text-xs uppercase tracking-wider flex items-center gap-2"
+                            className="px-4 py-2.5 bg-emerald-100 dark:bg-purple-500/15 hover:bg-emerald-200 dark:hover:bg-purple-500/25 border border-emerald-300 dark:border-purple-500/35 text-emerald-800 dark:text-purple-200 rounded-xl font-bold text-xs uppercase tracking-wider flex items-center gap-2"
                         >
                             <Icons.RotateCcw className="w-4 h-4" /> Reset
                         </button>
@@ -617,9 +617,9 @@ function WorkflowSimulation({
                 </div>
             </div>
 
-            <div className="bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/10 rounded-3xl p-5 min-h-[320px] flex flex-col">
+            <div className="bg-white dark:bg-[#111019] border border-emerald-200 dark:border-purple-500/35 rounded-3xl p-5 min-h-[320px] flex flex-col">
                 {messages.length === 0 ? (
-                    <div className="flex-1 flex items-center justify-center text-gray-600 text-sm">
+                    <div className="flex-1 flex items-center justify-center text-emerald-800 dark:text-purple-200 text-sm">
                         Start simulation to run this workflow.
                     </div>
                 ) : (
@@ -627,8 +627,8 @@ function WorkflowSimulation({
                         {messages.map((message) => (
                             <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                                 <div className={`max-w-[80%] px-4 py-2.5 rounded-2xl text-sm ${message.role === 'user'
-                                    ? 'bg-violet-600 text-white rounded-tr-md'
-                                    : 'bg-gray-100 dark:bg-white/8 border border-gray-200 dark:border-white/10 text-gray-700 dark:text-gray-200 rounded-tl-md'
+                                    ? 'bg-emerald-600 dark:bg-purple-600 text-white rounded-tr-md'
+                                    : 'bg-emerald-50 dark:bg-[#1a1627] border border-emerald-200 dark:border-purple-500/35 text-emerald-900 dark:text-purple-100 rounded-tl-md'
                                     }`}>
                                     {message.content}
                                 </div>
@@ -645,7 +645,7 @@ function WorkflowSimulation({
                             key={option.edgeId}
                             type="button"
                             onClick={() => onSelectOption(option.edgeId)}
-                            className="px-4 py-2 bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/30 rounded-full text-violet-300 text-xs font-medium"
+                            className="px-4 py-2 bg-emerald-500/10 dark:bg-purple-500/15 hover:bg-emerald-500/20 dark:hover:bg-purple-500/25 border border-emerald-500/30 dark:border-purple-500/35 rounded-full text-emerald-700 dark:text-purple-200 text-xs font-medium"
                         >
                             {option.label}
                         </button>
@@ -875,21 +875,21 @@ export function WorkflowEditor() {
     };
 
     if (loading) return (
-        <div className="h-full flex items-center justify-center bg-gray-50 dark:bg-[#08080c]">
-            <RefreshCw className="w-8 h-8 text-violet-500 animate-spin" />
+        <div className="h-full flex items-center justify-center bg-white dark:bg-[#08080c]">
+            <RefreshCw className="w-8 h-8 text-emerald-600 dark:text-purple-500 animate-spin" />
         </div>
     );
 
     return (
-        <div className="h-full flex flex-col bg-gray-50 dark:bg-[#08080c]">
+        <div className="h-full flex flex-col bg-white dark:bg-[#08080c]">
             {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-white/5 bg-white dark:bg-[#16161c] z-20">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-emerald-200 dark:border-purple-500/25 bg-white dark:bg-[#0e0d15] z-20">
                 <div className="flex items-center gap-4 flex-1">
-                    <button onClick={() => navigate('/app/workflows')} className="p-2 text-gray-500 hover:text-gray-900 dark:hover:text-white transition-colors">
+                    <button onClick={() => navigate('/app/workflows')} className="p-2 text-emerald-700 dark:text-purple-300 hover:text-emerald-900 dark:hover:text-purple-100 transition-colors">
                         <Icons.ChevronLeft className="w-6 h-6" />
                     </button>
-                    <div className="bg-violet-500/20 p-2 rounded-xl">
-                        <GitBranch className="w-5 h-5 text-violet-400" />
+                    <div className="bg-emerald-500/20 dark:bg-purple-500/20 p-2 rounded-xl">
+                        <GitBranch className="w-5 h-5 text-emerald-500 dark:text-purple-400" />
                     </div>
                     <div className="flex-1 max-w-md">
                         <input
@@ -897,44 +897,44 @@ export function WorkflowEditor() {
                             value={name}
                             onChange={(e) => { setName(e.target.value); setError(""); }}
                             placeholder="Workflow Name (e.g. Customer Support)"
-                            className="bg-transparent text-gray-900 dark:text-white font-bold w-full focus:outline-none placeholder:text-gray-400 dark:placeholder:text-gray-600 text-lg"
+                            className="bg-transparent text-gray-900 dark:text-purple-100 font-bold w-full focus:outline-none placeholder:text-emerald-500/70 dark:placeholder:text-purple-300/60 text-lg"
                         />
                     </div>
                 </div>
                 <div className="flex items-center gap-3">
-                    <div className="flex items-center bg-gray-100 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl p-1">
+                    <div className="flex items-center bg-emerald-50 dark:bg-[#161427] border border-emerald-200 dark:border-purple-500/30 rounded-xl p-1">
                         <button
                             type="button"
                             onClick={() => setActivePanel('builder')}
-                            className={`px-3 py-2 rounded-lg text-xs font-bold transition-all ${activePanel === 'builder' ? 'bg-violet-600 text-white' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-white/10'}`}
+                            className={`px-3 py-2 rounded-lg text-xs font-bold transition-all ${activePanel === 'builder' ? 'bg-emerald-600 dark:bg-purple-600 text-white' : 'text-emerald-700 dark:text-purple-300 hover:bg-emerald-100 dark:hover:bg-purple-500/20'}`}
                         >
                             Builder
                         </button>
                         <button
                             type="button"
                             onClick={() => setActivePanel('preview')}
-                            className={`px-3 py-2 rounded-lg text-xs font-bold transition-all ${activePanel === 'preview' ? 'bg-violet-600 text-white' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-white/10'}`}
+                            className={`px-3 py-2 rounded-lg text-xs font-bold transition-all ${activePanel === 'preview' ? 'bg-emerald-600 dark:bg-purple-600 text-white' : 'text-emerald-700 dark:text-purple-300 hover:bg-emerald-100 dark:hover:bg-purple-500/20'}`}
                         >
                             Preview
                         </button>
                         <button
                             type="button"
                             onClick={() => setActivePanel('simulate')}
-                            className={`px-3 py-2 rounded-lg text-xs font-bold transition-all ${activePanel === 'simulate' ? 'bg-violet-600 text-white' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-white/10'}`}
+                            className={`px-3 py-2 rounded-lg text-xs font-bold transition-all ${activePanel === 'simulate' ? 'bg-emerald-600 dark:bg-purple-600 text-white' : 'text-emerald-700 dark:text-purple-300 hover:bg-emerald-100 dark:hover:bg-purple-500/20'}`}
                         >
                             Simulate
                         </button>
                     </div>
                     <button
                         onClick={() => navigate('/app/workflows')}
-                        className="px-6 py-2.5 text-gray-400 hover:text-gray-900 dark:hover:text-white font-bold transition-all"
+                        className="px-6 py-2.5 text-emerald-700/70 dark:text-purple-300/70 hover:text-emerald-900 dark:hover:text-purple-100 font-bold transition-all"
                     >
                         Cancel
                     </button>
                     <button
                         onClick={handleSave}
                         disabled={isSaving}
-                        className="flex items-center gap-2 px-8 py-2.5 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white rounded-xl font-bold transition-all shadow-lg shadow-violet-600/20"
+                        className="flex items-center gap-2 px-8 py-2.5 bg-emerald-600 dark:bg-purple-600 hover:bg-emerald-500 dark:hover:bg-purple-500 disabled:opacity-50 text-white rounded-xl font-bold transition-all shadow-lg shadow-emerald-600/20 dark:shadow-purple-600/20"
                     >
                         {isSaving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
                         {id === 'new' ? "Create Workflow" : "Save Changes"}
