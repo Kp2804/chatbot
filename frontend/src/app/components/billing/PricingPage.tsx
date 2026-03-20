@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, CreditCard } from "lucide-react";
-import { useNavigate } from "react-router";
+import { useLocation, useNavigate } from "react-router";
 import { getAccessToken, supabase } from "../../../lib/supabase";
 import {
   type BillingPlan,
@@ -67,12 +67,17 @@ function ensureRazorpayScript(): Promise<void> {
 
 export function PricingPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [plans, setPlans] = useState<BillingPlan[]>([]);
   const [currentPlanId, setCurrentPlanId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [processingPlanId, setProcessingPlanId] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string>("");
+  const plansOnlyView = useMemo(() => {
+    const searchParams = new URLSearchParams(location.search);
+    return searchParams.get("view") === "plans";
+  }, [location.search]);
 
   const loadPageData = useCallback(async () => {
     try {
@@ -102,7 +107,7 @@ export function PricingPage() {
     loadPageData();
   }, [loadPageData]);
 
-  const showCards = useMemo(() => plans.slice(0, 3), [plans]);
+  const showCards = useMemo(() => plans.slice(0, 2), [plans]);
 
   const handleUpgrade = useCallback(
     async (plan: BillingPlan) => {
@@ -196,9 +201,12 @@ export function PricingPage() {
           <p className="text-gray-700 dark:text-gray-300 mt-2">
             Plans are loaded from your database and checkout runs through Razorpay subscriptions.
           </p>
+          <div className="mt-4 inline-flex items-center rounded-xl border border-amber-300/70 bg-amber-100/80 px-3 py-2 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
+            <span className="text-sm font-medium">An active plan is required before you can create a chatbot.</span>
+          </div>
         </div>
 
-        <UsageDashboard />
+        {!plansOnlyView && <UsageDashboard />}
 
         {error && (
           <div className="mb-6 rounded-xl border border-red-400/50 bg-red-500/10 px-4 py-3 text-red-700 dark:text-red-300 flex items-start gap-2">

@@ -2,6 +2,13 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { Bot, Plus, ArrowRight, RefreshCw } from "lucide-react";
 import { getAccessToken, supabase } from "../../../lib/supabase";
+import {
+  createSubscriptionSession,
+  fetchBillingState,
+  type BillingPlan,
+  verifySubscriptionPayment,
+} from "../billing/billingApi";
+import { PricingCard, PricingCardSkeleton } from "../billing/PricingCard";
 import { toast } from "sonner";
 import { EmptyState, ErrorState, MetricCardSkeleton } from "../ui/feedback";
 import { useUserRole } from "../../hooks/useUserRole";
@@ -15,6 +22,58 @@ interface Chatbot {
   updated_at: string;
 }
 
+const ACTIVE_SUBSCRIPTION_STATUSES = new Set(["active", "past_due", "trialing"]);
+
+type RazorpayPaymentResponse = {
+  razorpay_payment_id: string;
+  razorpay_subscription_id: string;
+  razorpay_signature: string;
+};
+
+type RazorpayOptions = {
+  key: string;
+  subscription_id: string;
+  name: string;
+  description: string;
+  handler: (response: RazorpayPaymentResponse) => void;
+  modal?: {
+    ondismiss?: () => void;
+  };
+  prefill?: {
+    email?: string;
+  };
+  theme?: {
+    color?: string;
+  };
+};
+
+declare global {
+  interface Window {
+    Razorpay?: {
+      new (options: RazorpayOptions): { open: () => void };
+    };
+  }
+}
+
+let razorpayScriptPromise: Promise<void> | null = null;
+
+function ensureRazorpayScript(): Promise<void> {
+  if (window.Razorpay) return Promise.resolve();
+
+  if (razorpayScriptPromise) return razorpayScriptPromise;
+
+  razorpayScriptPromise = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.async = true;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("Unable to load Razorpay checkout"));
+    document.body.appendChild(script);
+  });
+
+  return razorpayScriptPromise;
+}
+
 export function ChatbotSelectionPage() {
   const navigate = useNavigate();
   const { isAdmin } = useUserRole();
@@ -25,6 +84,12 @@ export function ChatbotSelectionPage() {
   const [chatbots, setChatbots] = useState<Chatbot[]>([]);
   const [createError, setCreateError] = useState("");
   const [fetchError, setFetchError] = useState("");
+  const [hasActivePlan, setHasActivePlan] = useState(false);
+  const [plans, setPlans] = useState<BillingPlan[]>([]);
+  const [currentPlanId, setCurrentPlanId] = useState<string | null>(null);
+  const [processingPlanId, setProcessingPlanId] = useState<string | null>(null);
+  const [billingError, setBillingError] = useState("");
+  const [userEmail, setUserEmail] = useState("");
   const backendUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:3001";
 
   useEffect(() => {
@@ -67,6 +132,15 @@ export function ChatbotSelectionPage() {
         navigate("/auth");
         return;
       }
+      setUserEmail(currentUser.email || "");
+
+      const billingState = await fetchBillingState(currentUser.id);
+      setPlans(billingState.plans.slice(0, 2));
+      setCurrentPlanId(billingState.subscription?.plan_id || null);
+      const isPlanActive = billingState.subscription
+        ? ACTIVE_SUBSCRIPTION_STATUSES.has(String(billingState.subscription.status || "").toLowerCase())
+        : false;
+      setHasActivePlan(isPlanActive);
 
       const { data, error } = await supabase
         .from("chatbots")
@@ -107,6 +181,9 @@ export function ChatbotSelectionPage() {
       const message = error?.message || "Error creating chatbot";
       setCreateError(message);
       console.error("Error creating chatbot:", message);
+      if (message.toLowerCase().includes("active subscription required")) {
+        toast.error("Please select a plan before creating a chatbot");
+      }
       toast.error("Could not create chatbot");
     } finally {
       setCreating(false);
@@ -114,6 +191,11 @@ export function ChatbotSelectionPage() {
   };
 
   const openCreateModal = () => {
+    if (!hasActivePlan) {
+      toast.error("Select an active plan to create a chatbot");
+      return;
+    }
+
     setNewChatbotName(`Chatbot ${chatbots.length + 1}`);
     setShowCreateModal(true);
   };
@@ -121,6 +203,84 @@ export function ChatbotSelectionPage() {
   const handleSelectChatbot = (chatbotId: string) => {
     localStorage.setItem("activeChatbotId", chatbotId);
     navigate(`/app/chat/${chatbotId}`);
+  };
+
+  const handleUpgradePlan = async (plan: BillingPlan) => {
+    if (plan.id === currentPlanId) return;
+
+    try {
+      setProcessingPlanId(plan.id);
+      setBillingError("");
+
+      const accessToken = await getAccessToken();
+      if (!accessToken) {
+        navigate("/auth");
+        return;
+      }
+
+      const checkoutSession = await createSubscriptionSession(accessToken, plan.id);
+
+      if (!checkoutSession.razorpay_key_id || checkoutSession.razorpay_key_id === "rzp_test_mock") {
+        if (checkoutSession.short_url) {
+          window.location.assign(checkoutSession.short_url);
+          return;
+        }
+        throw new Error("Razorpay key is not configured yet. Add your Razorpay API keys in Supabase secrets.");
+      }
+
+      await ensureRazorpayScript();
+      if (!window.Razorpay) {
+        throw new Error("Razorpay checkout is unavailable in this browser");
+      }
+
+      const razorpayCheckout = new window.Razorpay({
+        key: checkoutSession.razorpay_key_id,
+        subscription_id: checkoutSession.subscription_id,
+        name: "NexusBot",
+        description: `${plan.name} plan subscription`,
+        prefill: {
+          email: userEmail,
+        },
+        theme: {
+          color: "#0f766e",
+        },
+        handler: async (response) => {
+          try {
+            const latestToken = await getAccessToken();
+            if (!latestToken) {
+              throw new Error("Session expired. Please login again.");
+            }
+
+            await verifySubscriptionPayment(latestToken, {
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_subscription_id: response.razorpay_subscription_id,
+              razorpay_signature: response.razorpay_signature,
+            });
+
+            toast.success("Plan activated successfully");
+            await fetchChatbots();
+          } catch (verificationError) {
+            const message = verificationError instanceof Error
+              ? verificationError.message
+              : "Payment verification failed";
+            setBillingError(message);
+          } finally {
+            setProcessingPlanId(null);
+          }
+        },
+        modal: {
+          ondismiss: () => {
+            setProcessingPlanId(null);
+          },
+        },
+      });
+
+      razorpayCheckout.open();
+    } catch (checkoutError) {
+      const message = checkoutError instanceof Error ? checkoutError.message : "Checkout failed";
+      setBillingError(message);
+      setProcessingPlanId(null);
+    }
   };
 
   return (
@@ -138,12 +298,31 @@ export function ChatbotSelectionPage() {
           <button
             type="button"
             onClick={openCreateModal}
-            className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 dark:from-violet-600 dark:to-indigo-700 dark:hover:from-violet-700 dark:hover:to-indigo-800 text-white rounded-2xl transition-all shadow-lg shadow-emerald-600/25 dark:shadow-violet-600/25"
+            disabled={!hasActivePlan}
+            className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 dark:from-violet-600 dark:to-indigo-700 dark:hover:from-violet-700 dark:hover:to-indigo-800 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-2xl transition-all shadow-lg shadow-emerald-600/25 dark:shadow-violet-600/25"
             style={{ fontSize: "0.85rem", fontWeight: 700 }}
           >
             <Plus className="w-4 h-4" /> Create Chatbot
           </button>
         </div>
+
+        {!hasActivePlan && !loading && !fetchError && (
+          <div className="mb-6 rounded-2xl border border-amber-300/70 bg-amber-100/70 dark:border-amber-500/40 dark:bg-amber-500/10 px-4 py-3 flex items-center justify-between gap-3">
+            <p className="text-amber-900 dark:text-amber-200" style={{ fontSize: "0.8rem", fontWeight: 600 }}>
+              Select an active plan before creating a chatbot.
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                document.getElementById("plan-selection")?.scrollIntoView({ behavior: "smooth", block: "start" });
+              }}
+              className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg transition-colors"
+              style={{ fontSize: "0.75rem", fontWeight: 700 }}
+            >
+              View Plans
+            </button>
+          </div>
+        )}
 
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -161,9 +340,15 @@ export function ChatbotSelectionPage() {
         ) : chatbots.length === 0 ? (
           <EmptyState
             title="No bots yet"
-            description="Create your first chatbot to start handling conversations and knowledge workflows."
-            actionLabel="Create your first bot"
-            onAction={openCreateModal}
+            description={hasActivePlan
+              ? "Create your first chatbot to start handling conversations and knowledge workflows."
+              : "Choose a subscription plan to unlock chatbot creation and start handling conversations."
+            }
+            actionLabel={hasActivePlan ? "Create your first bot" : "Choose a plan"}
+            onAction={hasActivePlan
+              ? openCreateModal
+              : () => document.getElementById("plan-selection")?.scrollIntoView({ behavior: "smooth", block: "start" })
+            }
             className="max-w-2xl mx-auto"
           />
         ) : (
@@ -205,6 +390,43 @@ export function ChatbotSelectionPage() {
               </button>
             ))}
           </div>
+        )}
+
+        {!hasActivePlan && (
+          <section id="plan-selection" className="mt-8 rounded-3xl border border-emerald-200 dark:border-purple-500/25 bg-white dark:bg-[#10101a] p-6 md:p-8">
+            <h2 className="text-gray-900 dark:text-purple-100" style={{ fontSize: "1.5rem", fontWeight: 800 }}>
+              Select a plan to unlock chatbot creation
+            </h2>
+            <p className="text-emerald-800/80 dark:text-purple-300/70 mt-2" style={{ fontSize: "0.85rem" }}>
+              Choose any plan below to continue. Chatbot creation remains locked until your subscription is active.
+            </p>
+
+            {billingError && (
+              <p className="text-red-600 dark:text-red-300 mt-3" style={{ fontSize: "0.8rem" }}>
+                {billingError}
+              </p>
+            )}
+
+            <div className="grid gap-5 md:grid-cols-3 mt-6">
+              {loading && [1, 2, 3].map((item) => <PricingCardSkeleton key={`plan-skeleton-${item}`} />)}
+
+              {!loading && plans.length === 0 && (
+                <div className="md:col-span-3 rounded-2xl border border-gray-300 dark:border-white/10 bg-white dark:bg-[#171720] p-8 text-center text-gray-600 dark:text-gray-300">
+                  No active plans found. Add or seed plans in your plans table.
+                </div>
+              )}
+
+              {!loading && plans.map((plan) => (
+                <PricingCard
+                  key={plan.id}
+                  plan={plan}
+                  isCurrentPlan={plan.id === currentPlanId}
+                  isProcessing={processingPlanId === plan.id}
+                  onUpgrade={handleUpgradePlan}
+                />
+              ))}
+            </div>
+          </section>
         )}
 
         {showCreateModal && (

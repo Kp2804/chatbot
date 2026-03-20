@@ -18,6 +18,14 @@ const formatStorageLimit = (value: number | null): string => {
   return `${Math.round(value)} MB`;
 };
 
+const formatInrPrice = (value: number): string => {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 0,
+  }).format(value);
+};
+
 export function PricingCard({ plan, isCurrentPlan, isProcessing, onUpgrade }: PricingCardProps) {
   return (
     <article
@@ -37,7 +45,7 @@ export function PricingCard({ plan, isCurrentPlan, isProcessing, onUpgrade }: Pr
       </div>
 
       <div className="mb-5">
-        <div className="text-3xl font-bold text-black dark:text-white">${plan.price_monthly}</div>
+        <div className="text-3xl font-bold text-black dark:text-white">{formatInrPrice(plan.price_monthly)}</div>
         <p className="text-sm text-gray-600 dark:text-gray-400">per month</p>
       </div>
 

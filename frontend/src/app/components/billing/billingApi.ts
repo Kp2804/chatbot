@@ -72,7 +72,7 @@ export async function fetchBillingState(userId: string): Promise<BillingState> {
     .from("plans")
     .select("*")
     .order("price_monthly", { ascending: true })
-    .limit(3);
+    .limit(10);
 
   if (plansError) {
     throw new Error(`Failed to load plans: ${plansError.message}`);
@@ -87,6 +87,14 @@ export async function fetchBillingState(userId: string): Promise<BillingState> {
     storage_limit: plan.storage_limit == null ? null : Number(plan.storage_limit),
     razorpay_plan_id: typeof plan.razorpay_plan_id === "string" ? plan.razorpay_plan_id : null,
   }));
+
+  const TWO_PLAN_NAMES = new Set(["starter", "growth"]);
+  const curatedPlans = normalizedPlans
+    .filter((plan) => TWO_PLAN_NAMES.has(plan.name.toLowerCase()))
+    .sort((a, b) => a.price_monthly - b.price_monthly);
+
+  const visiblePlans = (curatedPlans.length > 0 ? curatedPlans : normalizedPlans)
+    .slice(0, 2);
 
   const { data: subscriptionsData, error: subscriptionsError } = await supabase
     .from("subscriptions")
@@ -104,7 +112,7 @@ export async function fetchBillingState(userId: string): Promise<BillingState> {
     || null;
 
   return {
-    plans: normalizedPlans,
+    plans: visiblePlans,
     subscription,
   };
 }

@@ -782,6 +782,7 @@ async function retrieveRelevantChunks(chatbotId: string, message: string, conver
 type PlanLimitResource = 'messages' | 'bots';
 
 const ACTIVE_SUBSCRIPTION_STATUSES = new Set(['active', 'past_due', 'trialing']);
+const REQUIRE_ACTIVE_PLAN_FOR_BOT_CREATION = (process.env.REQUIRE_ACTIVE_PLAN_FOR_BOT_CREATION || 'true').toLowerCase() !== 'false';
 const DEFAULT_NO_PLAN_BOT_LIMIT = Math.max(0, getEnvInt('DEFAULT_NO_PLAN_BOT_LIMIT', 1));
 const DEFAULT_NO_PLAN_MESSAGE_LIMIT = Math.max(0, getEnvInt('DEFAULT_NO_PLAN_MESSAGE_LIMIT', 1000));
 
@@ -924,7 +925,15 @@ function enforcePlanLimit(resource: PlanLimitResource) {
       const userId = await resolveUserIdForPlanLimit(req, res, resource);
       if (!userId) return;
 
-      const { messageLimit, botLimit, messagesUsed } = await getUserPlanAndUsage(userId);
+      const { subscriptionStatus, messageLimit, botLimit, messagesUsed } = await getUserPlanAndUsage(userId);
+
+      if (
+        resource === 'bots'
+        && REQUIRE_ACTIVE_PLAN_FOR_BOT_CREATION
+        && !ACTIVE_SUBSCRIPTION_STATUSES.has(String(subscriptionStatus || '').toLowerCase())
+      ) {
+        return res.status(403).json({ error: 'Active subscription required to create chatbot' });
+      }
 
       const exceededMessages = resource === 'messages' && messageLimit !== null && messagesUsed >= messageLimit;
       let exceededBots = false;
