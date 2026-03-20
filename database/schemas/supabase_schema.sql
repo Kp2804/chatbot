@@ -126,18 +126,72 @@ CREATE POLICY "Users can manage own chatbot settings" ON chatbot_settings FOR AL
 CREATE POLICY "Users can manage own chatbot sources" ON chatbot_knowledge_sources FOR ALL
   USING (EXISTS (SELECT 1 FROM chatbots WHERE chatbots.id = chatbot_knowledge_sources.chatbot_id AND chatbots.user_id = auth.uid()));
 
--- Conversations: Users can see and manage their own conversations
-CREATE POLICY "Users can manage own conversations" ON conversations FOR ALL USING (auth.uid() = user_id);
+-- Conversations: Users can manage their own conversations only for chatbots they own
+CREATE POLICY "Users can manage own conversations" ON conversations FOR ALL
+  USING (
+    auth.uid() = user_id
+    AND EXISTS (
+      SELECT 1
+      FROM chatbots
+      WHERE chatbots.id = conversations.chatbot_id
+        AND chatbots.user_id = auth.uid()
+    )
+  )
+  WITH CHECK (
+    auth.uid() = user_id
+    AND EXISTS (
+      SELECT 1
+      FROM chatbots
+      WHERE chatbots.id = conversations.chatbot_id
+        AND chatbots.user_id = auth.uid()
+    )
+  );
 
 -- Messages: Users can see messages in their own conversations
 CREATE POLICY "Users can manage messages in own conversations" ON messages FOR ALL
   USING (EXISTS (SELECT 1 FROM conversations WHERE id = messages.conversation_id AND user_id = auth.uid()));
 
--- Workflows: Users can manage their own workflows
-CREATE POLICY "Users can manage own workflows" ON workflows FOR ALL USING (auth.uid() = user_id);
+-- Workflows: Users can manage their own workflows only for chatbots they own
+CREATE POLICY "Users can manage own workflows" ON workflows FOR ALL
+  USING (
+    auth.uid() = user_id
+    AND EXISTS (
+      SELECT 1
+      FROM chatbots
+      WHERE chatbots.id = workflows.chatbot_id
+        AND chatbots.user_id = auth.uid()
+    )
+  )
+  WITH CHECK (
+    auth.uid() = user_id
+    AND EXISTS (
+      SELECT 1
+      FROM chatbots
+      WHERE chatbots.id = workflows.chatbot_id
+        AND chatbots.user_id = auth.uid()
+    )
+  );
 
--- FAQs: Users can manage their own FAQs
-CREATE POLICY "Users can manage own faqs" ON faqs FOR ALL USING (auth.uid() = user_id);
+-- FAQs: Users can manage their own FAQs only for chatbots they own
+CREATE POLICY "Users can manage own faqs" ON faqs FOR ALL
+  USING (
+    auth.uid() = user_id
+    AND EXISTS (
+      SELECT 1
+      FROM chatbots
+      WHERE chatbots.id = faqs.chatbot_id
+        AND chatbots.user_id = auth.uid()
+    )
+  )
+  WITH CHECK (
+    auth.uid() = user_id
+    AND EXISTS (
+      SELECT 1
+      FROM chatbots
+      WHERE chatbots.id = faqs.chatbot_id
+        AND chatbots.user_id = auth.uid()
+    )
+  );
 
 -- Simple trigger to create profile on signup
 CREATE OR REPLACE FUNCTION public.handle_new_user()

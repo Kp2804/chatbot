@@ -18,6 +18,7 @@ import { KnowledgeBasePage } from "./components/knowledge/KnowledgeBasePage";
 import { PricingPage } from "./components/billing/PricingPage";
 import { AdminChatbotsPage } from "./components/admin/AdminChatbotsPage";
 import { AdminUsersPage } from "./components/admin/AdminUsersPage";
+import { LandingPage } from "./components/marketing/LandingPage";
 import { Toaster } from "sonner";
 import { useUserRole, type AppRole } from "./hooks/useUserRole";
 
@@ -52,7 +53,7 @@ function RoleProtectedRoute({
 const router = createBrowserRouter([
   {
     path: "/",
-    element: <Navigate to="/auth" replace />,
+    Component: LandingPage,
   },
   {
     path: "/auth",

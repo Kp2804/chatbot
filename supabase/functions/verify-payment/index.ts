@@ -1,4 +1,4 @@
-import { corsHeaders } from "../_shared/cors.ts";
+import { buildCorsHeaders, isAllowedOrigin } from "../_shared/cors.ts";
 import { requireUser, supabaseAdmin } from "../_shared/auth.ts";
 import { fetchRazorpaySubscription, isBillingTestMode, verifyRazorpaySignature } from "../_shared/razorpay.ts";
 
@@ -14,6 +14,14 @@ if (!denoGlobal?.serve) {
 }
 
 denoGlobal.serve(async (req: Request) => {
+  const corsHeaders = buildCorsHeaders(req);
+  if (!isAllowedOrigin(req.headers.get("origin"), true)) {
+    return new Response(JSON.stringify({ error: "Origin not allowed" }), {
+      status: 403,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }

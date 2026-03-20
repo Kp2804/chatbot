@@ -48,6 +48,7 @@ Open `.env` and set:
 | `SUPABASE_SERVICE_KEY` | Supabase Dashboard → Project Settings → API → service_role key (**keep secret**) |
 | `GROQ_API_KEY` | https://console.groq.com/keys |
 | `VITE_BACKEND_URL` | `http://localhost:3001` for local dev |
+| `CORS_ALLOWED_ORIGINS` | Comma-separated allowed origins for frontend/widget |
 
 > **Never commit `.env`** — it is listed in `.gitignore`.
 
@@ -60,6 +61,9 @@ In the Supabase SQL editor, run the files in this order:
 3. `database/schemas/supabase_chatbot_features.sql` — workflows, FAQs, analytics
 4. `database/schemas/supabase_embed_read_policies.sql` — embedded widget read access
 5. `database/migrations/rag_tables.sql` — document chunks + vector search function
+6. `database/migrations/embed_public_access.sql` — secure public embed access policies
+7. `database/migrations/api_rate_limits.sql` — database-backed daily API rate limiting
+8. `database/migrations/multitenant_policy_hardening.sql` — strict cross-tenant ownership checks
 
 ### 4. Start the development servers
 
@@ -127,8 +131,11 @@ The widget loads `chatbot-widget.js` and accepts a `data-chatbot-id` attribute.
 
 ## Production notes
 
-- The in-memory rate limiter resets on restart and does not scale across multiple instances. Replace it with a Redis or Supabase-backed counter before deploying at scale.
+- Daily message rate limiting is database-backed. Run `database/migrations/api_rate_limits.sql` before production traffic.
 - Set `VITE_BACKEND_URL` to your deployed backend URL when building for production.
+- Set `CORS_ALLOWED_ORIGINS` to your exact production frontend/widget origins.
 - Set `VITE_ADMIN_EMAILS` (comma-separated) so only your platform admins can access admin-only pages.
 - Users not in `VITE_ADMIN_EMAILS` are treated as customers and get a restricted workspace view.
-- Run `npm run build` from the `frontend/` directory to produce a static build.
+- Mark only intended chatbots as public embeds with `chatbots.is_embed_public = true`.
+- Optionally set per-chatbot `chatbots.embed_allowed_origins` to restrict where the widget can run.
+- Run `npm run build` from the project root to produce a static build.

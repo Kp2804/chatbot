@@ -358,7 +358,7 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
       formData.append('sessionOnly', isSessionOnly);
       if (embedded && activeConvId) formData.append('conversationId', activeConvId);
 
-      const token = !embedded ? await getAccessToken() : null;
+      const token = await getAccessToken();
       const res = await fetch(`${backendUrl}/api/knowledge/upload`, {
         method: 'POST',
         headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -895,10 +895,12 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
         // Use AI to generate response
         try {
           const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+          const token = await getAccessToken();
           const response = await fetch(`${backendUrl}/api/chat`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
             },
             body: JSON.stringify({
               message: content,

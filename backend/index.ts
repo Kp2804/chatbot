@@ -16,6 +16,8 @@ import multer from 'multer';
 import { createClient } from '@supabase/supabase-js';
 import { createRequire } from 'module';
 import crypto from 'crypto';
+import dns from 'dns/promises';
+import net from 'net';
 import { translateText } from './services/translation';
 import { incrementBots, incrementMessages } from './services/usage';
 const _require = createRequire(import.meta.url);
@@ -61,6 +63,47 @@ const RAG_FALLBACK_MATCH_COUNT = getEnvInt('RAG_FALLBACK_MATCH_COUNT', RAG_MATCH
 const CHAT_HISTORY_LIMIT = getEnvInt('CHAT_HISTORY_LIMIT', 3);
 const AI_MAX_OUTPUT_TOKENS = getEnvInt('AI_MAX_OUTPUT_TOKENS', 512);
 const AI_MAX_RETRIES = getEnvInt('AI_MAX_RETRIES', 2);
+const MESSAGE_LIMIT_PER_DAY = getEnvInt('MESSAGE_LIMIT_PER_DAY', 50);
+
+const corsAllowlist = ((process.env.CORS_ALLOWED_ORIGINS || 'http://localhost:3000,http://localhost:5173')
+  .split(',')
+  .map((value) => value.trim())
+  .filter(Boolean));
+
+function normalizeHost(value: string) {
+  return value.trim().replace(/^\*\./, '').toLowerCase();
+}
+
+function originMatchesAllowed(origin: string, allowed: string) {
+  try {
+    const originHost = new URL(origin).hostname.toLowerCase();
+    const allowedHost = normalizeHost(allowed);
+    if (!allowedHost) return false;
+
+    if (allowed.startsWith('*.')) {
+      return originHost === allowedHost || originHost.endsWith(`.${allowedHost}`);
+    }
+
+    if (allowed.startsWith('http://') || allowed.startsWith('https://')) {
+      const allowedUrl = new URL(allowed);
+      return origin.toLowerCase() === `${allowedUrl.protocol}//${allowedUrl.host}`.toLowerCase();
+    }
+
+    return originHost === allowedHost;
+  } catch {
+    return false;
+  }
+}
+
+function isAllowedOrigin(
+  origin: string | undefined | null,
+  allowlist = corsAllowlist,
+  requirePresent = false
+) {
+  if (!origin) return !requirePresent;
+  if (allowlist.length === 0) return false;
+  return allowlist.some((allowed) => originMatchesAllowed(origin, allowed));
+}
 
 // Groq LLM client
 const groq = process.env.GROQ_API_KEY
@@ -426,6 +469,54 @@ function isSameWebsiteHost(hostA: string, hostB: string) {
   return hostA === hostB || hostA.endsWith(`.${hostB}`) || hostB.endsWith(`.${hostA}`);
 }
 
+function isPrivateOrLocalIp(host: string) {
+  const ip = net.isIP(host) ? host : '';
+  if (!ip) return false;
+
+  if (ip.includes(':')) {
+    const lower = ip.toLowerCase();
+    return lower === '::1'
+      || lower.startsWith('fc')
+      || lower.startsWith('fd')
+      || lower.startsWith('fe80');
+  }
+
+  const parts = ip.split('.').map((segment) => Number(segment));
+  if (parts.length !== 4 || parts.some((part) => Number.isNaN(part))) return true;
+  const [a, b] = parts;
+  if (a === 10 || a === 127 || a === 0) return true;
+  if (a === 169 && b === 254) return true;
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  if (a === 192 && b === 168) return true;
+  return false;
+}
+
+async function assertPublicSafeUrl(rawUrl: string) {
+  const parsed = new URL(rawUrl);
+
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+    throw new Error('Only HTTP/HTTPS URLs are allowed');
+  }
+
+  const hostname = parsed.hostname.toLowerCase();
+  if (
+    hostname === 'localhost'
+    || hostname.endsWith('.localhost')
+    || hostname.endsWith('.local')
+  ) {
+    throw new Error('Localhost/private domains are not allowed');
+  }
+
+  if (isPrivateOrLocalIp(hostname)) {
+    throw new Error('Private IP addresses are not allowed');
+  }
+
+  const records = await dns.lookup(hostname, { all: true });
+  if (!records.length || records.some((record) => isPrivateOrLocalIp(record.address))) {
+    throw new Error('Resolved host points to a private network address');
+  }
+}
+
 function shouldIncludeUrl(rawUrl: string, rootUrl: URL, scope: WebsiteScope, rules: WebsiteCrawlRules) {
   const candidate = new URL(rawUrl);
   const sameHost = candidate.hostname === rootUrl.hostname;
@@ -496,6 +587,7 @@ function extractLinks(html: string, baseUrl: string) {
 }
 
 async function fetchHtmlPage(url: string) {
+  await assertPublicSafeUrl(url);
   const response = await fetch(url, {
     headers: {
       'User-Agent': 'NexusChatbotIndexer/1.0 (+website indexing)'
@@ -863,67 +955,69 @@ function enforcePlanLimit(resource: PlanLimitResource) {
   };
 }
 
-// Rate limiting: 50 messages per user per day
-const MESSAGE_LIMIT_PER_DAY = 50;
-const userMessageCounts = new Map<string, { count: number; resetTime: number }>();
+// Middleware to enforce per-user daily limits with a persistent DB counter.
+const rateLimitMiddleware = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    if (!supabaseAdmin) {
+      return res.status(503).json({ error: 'Supabase not configured' });
+    }
 
-// Middleware to track and limit user messages
-const rateLimitMiddleware = (req: Request, res: Response, next: NextFunction) => {
-  // Get user identifier (IP address + user agent for uniqueness)
-  const userIdentifier = req.ip || req.socket.remoteAddress || 'unknown';
-  const userAgent = req.headers['user-agent'] || '';
-  const userId = `${userIdentifier}-${userAgent}`.substring(0, 100);
-  
-  const now = Date.now();
-  const oneDayMs = 24 * 60 * 60 * 1000;
-  
-  let userData = userMessageCounts.get(userId);
-  
-  // Reset if 24 hours have passed
-  if (!userData || now > userData.resetTime) {
-    userData = {
-      count: 0,
-      resetTime: now + oneDayMs
-    };
-    userMessageCounts.set(userId, userData);
-  }
-  
-  // Check if user has exceeded limit
-  if (userData.count >= MESSAGE_LIMIT_PER_DAY) {
-    const hoursUntilReset = Math.ceil((userData.resetTime - now) / (1000 * 60 * 60));
-    return res.status(429).json({ 
-      error: 'Daily message limit reached',
-      message: `You have reached the daily limit of ${MESSAGE_LIMIT_PER_DAY} messages. Please try again in ${hoursUntilReset} hour(s).`,
-      limit: MESSAGE_LIMIT_PER_DAY,
-      remaining: 0,
-      resetIn: hoursUntilReset
+    const authUserId = typeof res.locals.authUser?.id === 'string'
+      ? res.locals.authUser.id
+      : null;
+    if (!authUserId) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    const { data, error } = await supabaseAdmin.rpc('increment_daily_message_count', {
+      target_user_id: authUserId,
+      max_per_day: MESSAGE_LIMIT_PER_DAY
     });
+
+    if (error) throw error;
+
+    const row = Array.isArray(data) ? data[0] : data;
+    const used = Number(row?.used_count || 0);
+    const allowed = !!row?.allowed;
+    const resetAt = row?.reset_at || new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+
+    if (!allowed) {
+      const hoursUntilReset = Math.max(
+        1,
+        Math.ceil((new Date(resetAt).getTime() - Date.now()) / (1000 * 60 * 60))
+      );
+      return res.status(429).json({
+        error: 'Daily message limit reached',
+        message: `You have reached the daily limit of ${MESSAGE_LIMIT_PER_DAY} messages. Please try again in ${hoursUntilReset} hour(s).`,
+        limit: MESSAGE_LIMIT_PER_DAY,
+        remaining: 0,
+        resetIn: hoursUntilReset
+      });
+    }
+
+    res.setHeader('X-RateLimit-Limit', MESSAGE_LIMIT_PER_DAY.toString());
+    res.setHeader('X-RateLimit-Remaining', Math.max(0, MESSAGE_LIMIT_PER_DAY - used).toString());
+    res.setHeader('X-RateLimit-Reset', resetAt);
+    next();
+  } catch (error: any) {
+    console.error('Rate limit middleware error:', error?.message || error);
+    res.status(500).json({ error: 'Failed to enforce rate limits' });
   }
-  
-  // Increment counter
-  userData.count++;
-  userMessageCounts.set(userId, userData);
-  
-  // Add usage info to response headers
-  res.setHeader('X-RateLimit-Limit', MESSAGE_LIMIT_PER_DAY.toString());
-  res.setHeader('X-RateLimit-Remaining', (MESSAGE_LIMIT_PER_DAY - userData.count).toString());
-  res.setHeader('X-RateLimit-Reset', new Date(userData.resetTime).toISOString());
-  
-  next();
 };
 
-// Clean up old entries every hour
-setInterval(() => {
-  const now = Date.now();
-  for (const [userId, userData] of userMessageCounts.entries()) {
-    if (now > userData.resetTime + 24 * 60 * 60 * 1000) {
-      userMessageCounts.delete(userId);
-    }
-  }
-}, 60 * 60 * 1000);
-
 //Middleware
-app.use(cors());
+app.use(cors({
+  origin: (origin, callback) => {
+    if (isAllowedOrigin(origin || undefined)) {
+      callback(null, true);
+      return;
+    }
+    callback(new Error('Not allowed by CORS'));
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(express.json());
 
 // Health check endpoint (no rate limit)
@@ -933,7 +1027,7 @@ app.get('/health', (req: Request, res: Response) => {
     message: 'Chatbot backend is running',
     rateLimit: {
       messagesPerDay: MESSAGE_LIMIT_PER_DAY,
-      activeUsers: userMessageCounts.size
+      storage: 'database'
     }
   });
 });
@@ -960,14 +1054,64 @@ app.post('/api/translate', async (req: Request, res: Response) => {
   }
 });
 
-// Chat completion endpoint (with rate limiting)
-app.post('/api/chat', rateLimitMiddleware, enforcePlanLimit('messages'), async (req: Request, res: Response) => {
+// Chat completion endpoint (with auth + rate limiting)
+app.post('/api/chat', authMiddleware, rateLimitMiddleware, enforcePlanLimit('messages'), async (req: Request, res: Response) => {
   try {
     const { message, chatbotContext, conversationHistory, userName, chatbotId, conversationId, lang } = req.body;
+    const authUserId = String(res.locals.authUser?.id || '');
     const selectedLang: 'en' | 'hi' = lang === 'hi' ? 'hi' : 'en';
 
     if (!message) {
       return res.status(400).json({ error: 'Message is required' });
+    }
+    if (!chatbotId) {
+      return res.status(400).json({ error: 'chatbotId is required' });
+    }
+    if (!conversationId) {
+      return res.status(400).json({ error: 'conversationId is required' });
+    }
+    if (!supabaseAdmin) {
+      return res.status(503).json({ error: 'Supabase not configured' });
+    }
+
+    const { data: conversationRow, error: conversationError } = await supabaseAdmin
+      .from('conversations')
+      .select('id, chatbot_id, user_id')
+      .eq('id', conversationId)
+      .maybeSingle();
+    if (conversationError) {
+      return res.status(500).json({ error: 'Failed to validate conversation' });
+    }
+    if (!conversationRow || conversationRow.user_id !== authUserId) {
+      return res.status(403).json({ error: 'Forbidden conversation access' });
+    }
+    if (conversationRow.chatbot_id !== chatbotId) {
+      return res.status(400).json({ error: 'conversationId does not belong to chatbotId' });
+    }
+
+    const { data: chatbotRow, error: chatbotError } = await supabaseAdmin
+      .from('chatbots')
+      .select('id, user_id, is_embed_public, embed_allowed_origins')
+      .eq('id', chatbotId)
+      .maybeSingle();
+    if (chatbotError) {
+      return res.status(500).json({ error: 'Failed to validate chatbot access' });
+    }
+    if (!chatbotRow) {
+      return res.status(404).json({ error: 'Chatbot not found' });
+    }
+
+    const isOwner = chatbotRow.user_id === authUserId;
+    if (!isOwner) {
+      if (!chatbotRow.is_embed_public) {
+        return res.status(403).json({ error: 'Chatbot is not publicly embeddable' });
+      }
+      const allowedOrigins = Array.isArray(chatbotRow.embed_allowed_origins)
+        ? chatbotRow.embed_allowed_origins.filter(Boolean)
+        : [];
+      if (allowedOrigins.length > 0 && !isAllowedOrigin(req.headers.origin, allowedOrigins, true)) {
+        return res.status(403).json({ error: 'Origin is not allowed for this chatbot' });
+      }
     }
 
     const englishMessage = selectedLang === 'hi'
@@ -1167,9 +1311,8 @@ app.post('/api/chat', rateLimitMiddleware, enforcePlanLimit('messages'), async (
       `AI chat error: ${error?.message || 'Unknown error'}`
     );
 
-    res.status(500).json({ 
-      error: 'Failed to generate AI response',
-      details: error.message 
+    res.status(500).json({
+      error: 'Failed to generate AI response'
     });
   }
 });
@@ -1202,6 +1345,13 @@ async function requireAuth(req: Request, res: Response): Promise<{ id: string; e
     isAdmin: role === 'admin' || role === 'superadmin',
     isSuperAdmin: role === 'superadmin',
   };
+}
+
+async function authMiddleware(req: Request, res: Response, next: NextFunction) {
+  const user = await requireAuth(req, res);
+  if (!user) return;
+  res.locals.authUser = user;
+  next();
 }
 
 async function requireAdmin(req: Request, res: Response): Promise<{ id: string; email: string } | null> {
@@ -1577,12 +1727,13 @@ app.post('/api/knowledge/upload', upload.single('file'), async (req: Request, re
     }
 
     const isSessionOnly = sessionOnly === 'true';
+    const user = await requireAuth(req, res);
+    if (!user) return;
 
     // Persistent uploads require the authenticated chatbot owner.
-    // Session-only uploads (from widget users) are allowed without auth.
+    // Session-only uploads are allowed for authenticated embedded visitors when
+    // they are chatting on a public bot from an allowed origin.
     if (!isSessionOnly) {
-      const user = await requireAuth(req, res);
-      if (!user) return;
       const owns = await requireChatbotOwner(user.id, chatbotId, res);
       if (!owns) return;
 
@@ -1600,6 +1751,45 @@ app.post('/api/knowledge/upload', upload.single('file'), async (req: Request, re
         return res.status(409).json({
           error: `PDF upload limit reached. You can keep up to ${MAX_PDF_SOURCES_PER_CHATBOT} PDFs. Delete one to upload another.`
         });
+      }
+    } else {
+      if (!conversationId) {
+        return res.status(400).json({ error: 'conversationId is required for session uploads' });
+      }
+
+      const { data: conversationRow, error: conversationError } = await supabaseAdmin
+        .from('conversations')
+        .select('id, chatbot_id, user_id')
+        .eq('id', conversationId)
+        .maybeSingle();
+      if (conversationError) {
+        return res.status(500).json({ error: 'Failed to validate conversation' });
+      }
+      if (!conversationRow || conversationRow.user_id !== user.id) {
+        return res.status(403).json({ error: 'Forbidden conversation access' });
+      }
+      if (conversationRow.chatbot_id !== chatbotId) {
+        return res.status(400).json({ error: 'conversationId does not belong to chatbotId' });
+      }
+
+      const { data: chatbotRow, error: chatbotError } = await supabaseAdmin
+        .from('chatbots')
+        .select('id, user_id, is_embed_public, embed_allowed_origins')
+        .eq('id', chatbotId)
+        .maybeSingle();
+      if (chatbotError) return res.status(500).json({ error: 'Failed to validate chatbot access' });
+      if (!chatbotRow) return res.status(404).json({ error: 'Chatbot not found' });
+
+      if (chatbotRow.user_id !== user.id) {
+        if (!chatbotRow.is_embed_public) {
+          return res.status(403).json({ error: 'Chatbot is not publicly embeddable' });
+        }
+        const allowedOrigins = Array.isArray(chatbotRow.embed_allowed_origins)
+          ? chatbotRow.embed_allowed_origins.filter(Boolean)
+          : [];
+        if (allowedOrigins.length > 0 && !isAllowedOrigin(req.headers.origin, allowedOrigins, true)) {
+          return res.status(403).json({ error: 'Origin is not allowed for this chatbot' });
+        }
       }
     }
 
@@ -2188,6 +2378,9 @@ app.delete('/api/knowledge/source/:sourceId', async (req: Request, res: Response
 
 // Error handling middleware
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {
+  if (err?.message === 'Not allowed by CORS') {
+    return res.status(403).json({ error: 'Origin not allowed' });
+  }
   console.error('Server error:', err);
   res.status(500).json({ error: 'Internal server error' });
 });
@@ -2198,6 +2391,8 @@ app.listen(PORT, () => {
   console.log(`✅ Groq API key configured: ${!!process.env.GROQ_API_KEY}`);
   console.log(`✅ Ollama fallback enabled: ${OLLAMA_FALLBACK_ENABLED}`);
   console.log(`✅ RAG limits: matches=${RAG_MATCH_COUNT}, neighbours=${RAG_NEIGHBOR_WINDOW}, contextChars=${RAG_MAX_CONTEXT_CHARS}, threshold=${RAG_MATCH_THRESHOLD}, fallbackFloor=${RAG_FALLBACK_MIN_SIMILARITY}, history=${CHAT_HISTORY_LIMIT}, output=${AI_MAX_OUTPUT_TOKENS}`);
+  console.log(`✅ CORS allowlist entries: ${corsAllowlist.length}`);
+  console.log(`✅ Daily message rate limit: ${MESSAGE_LIMIT_PER_DAY} (database-backed)`);
   if (AI_PROVIDER === 'ollama-only' || OLLAMA_FALLBACK_ENABLED) {
     console.log(`✅ Ollama endpoint: ${OLLAMA_BASE_URL}`);
     console.log(`✅ Ollama model: ${OLLAMA_MODEL}`);
