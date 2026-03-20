@@ -3,7 +3,7 @@ import { Bot, Sparkles, ShieldCheck, Rocket, CheckCircle2 } from "lucide-react";
 
 export function LandingPage() {
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_10%_10%,#d1fae5_0%,#ecfdf5_35%,#f8fafc_100%)] text-slate-900">
+    <main className="min-h-screen w-full bg-[radial-gradient(circle_at_10%_10%,#d1fae5_0%,#ecfdf5_35%,#f8fafc_100%)] text-slate-900">
       <div className="mx-auto max-w-6xl px-6 py-10 md:py-16">
         <header className="flex items-center justify-between">
           <div className="flex items-center gap-3">
