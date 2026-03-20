@@ -227,7 +227,7 @@ export function KnowledgeBasePage() {
     if (!chatbotId || !url.trim()) return;
     
     if (!hasActivePlan) {
-      setError("Previewing websites requires an active plan");
+      setError("You need a plan to index a site");
       return;
     }
     
@@ -258,7 +258,7 @@ export function KnowledgeBasePage() {
     if (!chatbotId || !url.trim()) return;
     
     if (!hasActivePlan) {
-      setError("Indexing websites requires an active plan");
+      setError("You need a plan to index a site");
       return;
     }
     
@@ -316,12 +316,21 @@ export function KnowledgeBasePage() {
       const res = await fetch(`${backendUrl}/api/knowledge/${id}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
-      if (!res.ok) throw new Error("Failed to load sources");
+      if (!res.ok) {
+        if (res.status === 403) {
+          throw new Error(view === "website" ? "You need a plan to index a site" : "You need a plan to upload a PDF");
+        }
+        throw new Error("Failed to load sources");
+      }
       const data = (await readJsonSafely(res)) as KnowledgeSource[] | null;
       if (!Array.isArray(data)) throw new Error("Failed to parse sources");
       setSources(data);
     } catch (err: any) {
-      setError(err.message);
+      if ((err?.message || "") === "Failed to load sources" && !hasActivePlan) {
+        setError(view === "website" ? "You need a plan to index a site" : "You need a plan to upload a PDF");
+      } else {
+        setError(err.message);
+      }
     } finally {
       setSourcesLoading(false);
     }
@@ -477,7 +486,7 @@ export function KnowledgeBasePage() {
     
     if (!hasActivePlan) {
       setUploadStatus("error");
-      setUploadMessage("Uploading documents requires an active plan");
+      setUploadMessage("You need a plan to upload a PDF");
       setTimeout(() => setUploadStatus("idle"), 3000);
       return;
     }

@@ -6,6 +6,9 @@ import {
 } from "lucide-react";
 import { motion } from "motion/react";
 import { supabase } from "../../../lib/supabase";
+import { fetchBillingState } from "../billing/billingApi";
+
+const ACTIVE_SUBSCRIPTION_STATUSES = new Set(["active", "past_due", "trialing"]);
 
 /* ─── Types (Duplicated for standalone use, should be moved to shared types.ts) ─── */
 
@@ -844,6 +847,24 @@ export function WorkflowEditor() {
         }
 
         try {
+            const { data: userData } = await supabase.auth.getUser();
+            if (!userData.user) throw new Error("Not authenticated");
+
+            const billingState = await fetchBillingState(userData.user.id);
+            const isPlanActive = billingState.subscription
+                ? ACTIVE_SUBSCRIPTION_STATUSES.has(String(billingState.subscription.status || "").toLowerCase())
+                : false;
+
+            if (!isPlanActive) {
+                setError("Plan required to create a workflow");
+                return;
+            }
+        } catch (err: any) {
+            setError(err?.message || "Unable to verify your plan status.");
+            return;
+        }
+
+        try {
             setIsSaving(true);
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) throw new Error("Not authenticated");
@@ -868,7 +889,12 @@ export function WorkflowEditor() {
 
             navigate('/app/workflows');
         } catch (err: any) {
-            setError(err.message);
+            const message = String(err?.message || "").toLowerCase();
+            if (message.includes("active subscription required") || message.includes("subscription") || message.includes("plan")) {
+                setError("Plan required to create a workflow");
+            } else {
+                setError(err.message);
+            }
         } finally {
             setIsSaving(false);
         }

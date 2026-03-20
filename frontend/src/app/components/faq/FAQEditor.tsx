@@ -19,7 +19,7 @@ export function FAQEditor() {
 
     useEffect(() => {
         if (!activeChatbotId) {
-            navigate('/app');
+            navigate('/app/chatbots');
             return;
         }
         if (id && id !== 'new') {

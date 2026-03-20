@@ -313,6 +313,21 @@ export function FAQManager() {
     if (importRef.current) importRef.current.value = "";
   };
 
+  const handleAddFaq = () => {
+    if (!hasActiveChatbot) {
+      showToast("Select a chatbot first to add FAQs", "info");
+      navigate("/app/chatbots");
+      return;
+    }
+
+    if (!hasActivePlan) {
+      showToast("Creating FAQs requires an active plan", "info");
+      return;
+    }
+
+    navigate("/app/faq/new");
+  };
+
   const publishedCount = faqList.filter((f) => f.status === "published").length;
   const draftCount = faqList.filter((f) => f.status === "draft").length;
   const totalViews = faqList.reduce((sum, f) => sum + f.views, 0);
@@ -359,11 +374,11 @@ export function FAQManager() {
             </button>
             <button
               type="button"
-              onClick={() => navigate(hasActiveChatbot ? "/app/faq/new" : "/app")}
+              onClick={handleAddFaq}
               className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-violet-500 to-indigo-600 hover:from-violet-600 hover:to-indigo-700 text-white rounded-xl transition-all shadow-lg shadow-violet-500/25"
               style={{ fontSize: "0.875rem", fontWeight: 600 }}
             >
-              <Plus className="w-4 h-4" /> {hasActiveChatbot ? "Add FAQ" : "Select Chatbot to Add FAQ"}
+              {hasActiveChatbot && hasActivePlan ? <Plus className="w-4 h-4" /> : <Lock className="w-4 h-4" />} {hasActiveChatbot ? (hasActivePlan ? "Add FAQ" : "Plan Required") : "Select Chatbot to Add FAQ"}
             </button>
           </div>
         </div>
