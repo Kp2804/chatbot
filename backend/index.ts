@@ -19,7 +19,7 @@ import crypto from 'crypto';
 import dns from 'dns/promises';
 import net from 'net';
 import { translateText } from './services/translation';
-import { incrementBots, incrementMessages } from './services/usage';
+import { incrementMessages } from './services/usage';
 const _require = createRequire(import.meta.url);
 
 // Direct import used to bypass pdf-parse ESM startup issue
@@ -783,6 +783,7 @@ type PlanLimitResource = 'messages' | 'bots';
 
 const ACTIVE_SUBSCRIPTION_STATUSES = new Set(['active', 'past_due', 'trialing']);
 const REQUIRE_ACTIVE_PLAN_FOR_BOT_CREATION = (process.env.REQUIRE_ACTIVE_PLAN_FOR_BOT_CREATION || 'true').toLowerCase() !== 'false';
+const REQUIRE_ACTIVE_PLAN_FOR_MESSAGES = (process.env.REQUIRE_ACTIVE_PLAN_FOR_MESSAGES || 'true').toLowerCase() !== 'false';
 const DEFAULT_NO_PLAN_BOT_LIMIT = Math.max(0, getEnvInt('DEFAULT_NO_PLAN_BOT_LIMIT', 1));
 const DEFAULT_NO_PLAN_MESSAGE_LIMIT = Math.max(0, getEnvInt('DEFAULT_NO_PLAN_MESSAGE_LIMIT', 1000));
 
@@ -926,20 +927,30 @@ function enforcePlanLimit(resource: PlanLimitResource) {
       if (!userId) return;
 
       const { subscriptionStatus, messageLimit, botLimit, messagesUsed } = await getUserPlanAndUsage(userId);
+      const hasActiveSubscription = ACTIVE_SUBSCRIPTION_STATUSES.has(String(subscriptionStatus || '').toLowerCase());
 
       if (
         resource === 'bots'
         && REQUIRE_ACTIVE_PLAN_FOR_BOT_CREATION
-        && !ACTIVE_SUBSCRIPTION_STATUSES.has(String(subscriptionStatus || '').toLowerCase())
+        && !hasActiveSubscription
       ) {
         return res.status(403).json({ error: 'Active subscription required to create chatbot' });
       }
 
+      if (
+        resource === 'messages'
+        && REQUIRE_ACTIVE_PLAN_FOR_MESSAGES
+        && !hasActiveSubscription
+      ) {
+        return res.status(403).json({ error: 'Active subscription required to send messages' });
+      }
+
       const exceededMessages = resource === 'messages' && messageLimit !== null && messagesUsed >= messageLimit;
       let exceededBots = false;
+      let activeChatbotCount: number | null = null;
 
       if (resource === 'bots' && botLimit !== null) {
-        const { count: activeChatbotCount, error: activeChatbotsError } = await supabaseAdmin!
+        const { count, error: activeChatbotsError } = await supabaseAdmin!
           .from('chatbots')
           .select('id', { count: 'exact', head: true })
           .eq('user_id', userId);
@@ -948,11 +959,29 @@ function enforcePlanLimit(resource: PlanLimitResource) {
           throw new Error(activeChatbotsError.message);
         }
 
-        exceededBots = Number(activeChatbotCount || 0) >= botLimit;
+        activeChatbotCount = Number(count || 0);
+        exceededBots = activeChatbotCount >= botLimit;
       }
 
-      if (exceededMessages || exceededBots) {
-        return res.status(403).json({ error: 'Usage limit exceeded' });
+      if (exceededMessages) {
+        return res.status(403).json({
+          error: 'Message limit reached for your current plan',
+          resource: 'messages',
+          limit: messageLimit,
+          used: messagesUsed,
+          remaining: Math.max(0, Number(messageLimit || 0) - messagesUsed),
+        });
+      }
+
+      if (exceededBots) {
+        const usedBots = activeChatbotCount ?? 0;
+        return res.status(403).json({
+          error: 'Chatbot limit reached for your current plan',
+          resource: 'bots',
+          limit: botLimit,
+          used: usedBots,
+          remaining: Math.max(0, Number(botLimit || 0) - usedBots),
+        });
       }
 
       res.locals.planLimitUserId = userId;
@@ -1428,12 +1457,6 @@ app.post('/api/chatbots', enforcePlanLimit('bots'), async (req: Request, res: Re
 
     if (error) {
       throw new Error(error.message);
-    }
-
-    try {
-      await incrementBots(supabaseAdmin, authenticatedUserId);
-    } catch (usageError: any) {
-      console.warn('Usage tracking warning (bots_created):', usageError?.message || usageError);
     }
 
     res.status(201).json(data);

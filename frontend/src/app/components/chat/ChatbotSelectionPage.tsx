@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
-import { Bot, Plus, ArrowRight, RefreshCw } from "lucide-react";
+import { Bot, Plus, ArrowRight, RefreshCw, LogOut } from "lucide-react";
 import { getAccessToken, supabase } from "../../../lib/supabase";
 import {
   createSubscriptionSession,
@@ -90,6 +90,7 @@ export function ChatbotSelectionPage() {
   const [processingPlanId, setProcessingPlanId] = useState<string | null>(null);
   const [billingError, setBillingError] = useState("");
   const [userEmail, setUserEmail] = useState("");
+  const [loggingOut, setLoggingOut] = useState(false);
   const backendUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:3001";
 
   useEffect(() => {
@@ -205,6 +206,20 @@ export function ChatbotSelectionPage() {
     navigate(`/app/chat/${chatbotId}`);
   };
 
+  const handleLogout = async () => {
+    try {
+      setLoggingOut(true);
+      await supabase.auth.signOut();
+      localStorage.removeItem("activeChatbotId");
+      toast.success("Logged out successfully");
+      navigate("/auth");
+    } catch (error) {
+      toast.error("Could not log out. Please try again.");
+    } finally {
+      setLoggingOut(false);
+    }
+  };
+
   const handleUpgradePlan = async (plan: BillingPlan) => {
     if (plan.id === currentPlanId) return;
 
@@ -295,15 +310,26 @@ export function ChatbotSelectionPage() {
               Choose a chatbot to open conversations
             </p>
           </div>
-          <button
-            type="button"
-            onClick={openCreateModal}
-            disabled={!hasActivePlan}
-            className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 dark:from-violet-600 dark:to-indigo-700 dark:hover:from-violet-700 dark:hover:to-indigo-800 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-2xl transition-all shadow-lg shadow-emerald-600/25 dark:shadow-violet-600/25"
-            style={{ fontSize: "0.85rem", fontWeight: 700 }}
-          >
-            <Plus className="w-4 h-4" /> Create Chatbot
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={openCreateModal}
+              disabled={!hasActivePlan}
+              className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 dark:from-violet-600 dark:to-indigo-700 dark:hover:from-violet-700 dark:hover:to-indigo-800 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-2xl transition-all shadow-lg shadow-emerald-600/25 dark:shadow-violet-600/25"
+              style={{ fontSize: "0.85rem", fontWeight: 700 }}
+            >
+              <Plus className="w-4 h-4" /> Create Chatbot
+            </button>
+            <button
+              type="button"
+              onClick={handleLogout}
+              disabled={loggingOut}
+              className="flex items-center gap-2 px-4 py-3 bg-white hover:bg-rose-50 border border-rose-300 text-rose-700 dark:bg-[#1a1627] dark:hover:bg-[#25182a] dark:border-rose-500/40 dark:text-rose-300 rounded-2xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{ fontSize: "0.82rem", fontWeight: 700 }}
+            >
+              <LogOut className="w-4 h-4" /> {loggingOut ? "Logging out..." : "Logout"}
+            </button>
+          </div>
         </div>
 
         {!hasActivePlan && !loading && !fetchError && (

@@ -208,6 +208,8 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
     return storedLanguage === 'hi' ? 'hi' : 'en';
   });
   const [isHistoryTranslating, setIsHistoryTranslating] = useState(false);
+  const [planMessageLimit, setPlanMessageLimit] = useState<number | null>(null);
+  const [planMessagesUsed, setPlanMessagesUsed] = useState<number>(0);
   const originalMessageContentRef = useRef<Record<string, string>>({});
   const translatedMessageCacheRef = useRef<Record<string, Record<AppLanguage, string>>>({});
   const lastLanguageRef = useRef<AppLanguage>(language);
@@ -379,6 +381,28 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
     }
   };
 
+  const fetchPlanMessageUsage = async () => {
+    if (embedded || !activeChatbotId) return;
+
+    try {
+      const token = await getAccessToken();
+      const res = await fetch(`${backendUrl}/api/chatbots/${activeChatbotId}/limits`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+
+      if (!res.ok) return;
+      const data = await res.json().catch(() => ({}));
+
+      const nextLimit = data?.plan?.messageLimit;
+      const nextUsed = data?.usage?.messagesUsed;
+
+      setPlanMessageLimit(nextLimit == null ? null : Number(nextLimit));
+      setPlanMessagesUsed(Number(nextUsed || 0));
+    } catch {
+      // Keep current values when usage endpoint is temporarily unavailable.
+    }
+  };
+
   const handleVoiceToggle = () => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
@@ -496,6 +520,12 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
       localStorage.setItem("activeChatbotId", activeChatbotId);
     }
   }, [activeChatbotId]);
+
+  useEffect(() => {
+    if (!embedded && activeChatbotId) {
+      void fetchPlanMessageUsage();
+    }
+  }, [activeChatbotId, embedded]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (activeChatbotId) {
@@ -925,6 +955,16 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
             // Rate limit exceeded
             const errorData = await response.json();
             aiResponse = `⚠️ **Daily Message Limit Reached**\n\n${errorData.message || 'You have reached your daily message limit. Please try again tomorrow.'}\n\nLimit: ${errorData.limit || 50} messages per day`;
+          } else if (response.status === 403) {
+            const errorData = await response.json().catch(() => ({}));
+            const isMessageQuota = String(errorData?.resource || "").toLowerCase() === "messages";
+            if (isMessageQuota) {
+              const used = Number(errorData?.used || 0);
+              const limit = Number(errorData?.limit || 0);
+              aiResponse = `⚠️ **Plan Message Limit Reached**\n\nYou have used ${used} of ${limit} messages in your current plan. Upgrade your plan to continue chatting.`;
+            } else {
+              aiResponse = `⚠️ **Access Restricted**\n\n${errorData?.error || "Your current plan does not allow this action."}`;
+            }
           } else if (!response.ok) {
             throw new Error('Failed to get AI response');
           } else {
@@ -953,6 +993,10 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
           const { data: savedBotMsg } = await supabase.from('messages').insert([botMsg]).select().single();
           if (savedBotMsg) {
             setMessages(prev => [...prev, savedBotMsg]);
+          }
+        } finally {
+          if (!embedded) {
+            await fetchPlanMessageUsage();
           }
         }
         setIsTyping(false);
@@ -1157,6 +1201,19 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
             </div>
             <div className="flex items-center gap-2">
               {!embedded && <LanguageSwitcher language={language} onChange={setLanguage} />}
+              {!embedded && (
+                <div
+                  className={`px-2.5 py-1 rounded-lg border ${
+                    planMessageLimit !== null && planMessagesUsed >= planMessageLimit
+                      ? "border-red-300 text-red-700 bg-red-100 dark:border-red-400/40 dark:text-red-300 dark:bg-red-500/10"
+                      : "border-emerald-300 text-emerald-700 bg-emerald-100 dark:border-emerald-400/30 dark:text-emerald-300 dark:bg-emerald-500/10"
+                  }`}
+                  style={{ fontSize: "0.68rem", fontWeight: 600 }}
+                  title="Plan message usage"
+                >
+                  {`Messages: ${planMessagesUsed} / ${planMessageLimit ?? "Unlimited"}`}
+                </div>
+              )}
               {isHistoryTranslating && (
                 <span className="text-violet-500 dark:text-violet-400" style={{ fontSize: "0.65rem" }}>
                   {t('chat.translatingChat')}
