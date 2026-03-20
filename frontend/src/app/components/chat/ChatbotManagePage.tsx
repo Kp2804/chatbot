@@ -67,7 +67,7 @@ export function ChatbotManagePage() {
   const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'done' | 'error'>('idle');
   const [uploadMessage, setUploadMessage] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+  const backendUrl = import.meta.env.VITE_BACKEND_URL || '';
   const pdfLimitReached = kbSources.length >= MAX_PDF_UPLOADS;
 
   useEffect(() => {

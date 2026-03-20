@@ -18,7 +18,7 @@ export function AdminChatbotsPage() {
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const backendUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:3001";
+  const backendUrl = import.meta.env.VITE_BACKEND_URL || "";
 
   const loadRows = useCallback(async () => {
     try {

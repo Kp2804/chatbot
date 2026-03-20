@@ -91,7 +91,7 @@ export function ChatbotSelectionPage() {
   const [billingError, setBillingError] = useState("");
   const [userEmail, setUserEmail] = useState("");
   const [loggingOut, setLoggingOut] = useState(false);
-  const backendUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:3001";
+  const backendUrl = import.meta.env.VITE_BACKEND_URL || "";
 
   useEffect(() => {
     fetchChatbots();

@@ -202,7 +202,7 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
   const [pdfStatus, setPdfStatus] = useState<'idle' | 'uploading' | 'done' | 'error'>('idle');
   const [pdfStatusMsg, setPdfStatusMsg] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+  const backendUrl = import.meta.env.VITE_BACKEND_URL || '';
   const [language, setLanguage] = useState<AppLanguage>(() => {
     const storedLanguage = localStorage.getItem('app_lang');
     return storedLanguage === 'hi' ? 'hi' : 'en';
@@ -924,7 +924,7 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
       } else {
         // Use AI to generate response
         try {
-          const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+          const backendUrl = import.meta.env.VITE_BACKEND_URL || '';
           const token = await getAccessToken();
           const response = await fetch(`${backendUrl}/api/chat`, {
             method: 'POST',

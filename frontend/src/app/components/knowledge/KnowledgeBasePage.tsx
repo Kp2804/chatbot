@@ -128,7 +128,7 @@ export function KnowledgeBasePage() {
   const [view, setView] = useState<"documents" | "website">("website");
   const [chatbotId, setChatbotId] = useState<string | null>(null);
   const [hasActivePlan, setHasActivePlan] = useState(false);
-  const backendUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:3001";
+  const backendUrl = import.meta.env.VITE_BACKEND_URL || "";
 
   const [url, setUrl] = useState("");
   const [scope, setScope] = useState<WebsiteScope>("linked_pages");

@@ -17,7 +17,7 @@ export function AdminUsersPage() {
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<"all" | "superadmin" | "admin" | "customer">("all");
   const [updatingId, setUpdatingId] = useState<string | null>(null);
-  const backendUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:3001";
+  const backendUrl = import.meta.env.VITE_BACKEND_URL || "";
 
   const loadRows = useCallback(async () => {
     try {
