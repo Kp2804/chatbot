@@ -153,10 +153,7 @@ export function WorkflowInterface() {
   const [previewModeByWorkflow, setPreviewModeByWorkflow] = useState<Record<string, "structure" | "visual">>({});
 
   useEffect(() => {
-    if (!activeChatbotId) {
-      navigate('/app');
-      return;
-    }
+    if (!activeChatbotId) return;
     fetchWorkflows();
   }, [activeChatbotId]);
 
@@ -286,6 +283,29 @@ export function WorkflowInterface() {
   const setPreviewMode = (workflowId: string, mode: "structure" | "visual") => {
     setPreviewModeByWorkflow((prev) => ({ ...prev, [workflowId]: mode }));
   };
+
+  if (!activeChatbotId) {
+    return (
+      <div className="h-full overflow-y-auto bg-gray-50 dark:bg-[#08080c]">
+        <div className="max-w-4xl mx-auto p-10">
+          <div className="text-center py-24 bg-white dark:bg-[#111019] border border-gray-200 dark:border-white/10 rounded-3xl">
+            <GitBranch className="w-14 h-14 mx-auto mb-5 text-emerald-500/60 dark:text-violet-400/70" />
+            <h2 className="text-gray-900 dark:text-white text-2xl font-black mb-2">Select a chatbot first</h2>
+            <p className="text-gray-500 dark:text-gray-400 mb-8">
+              Workflows are scoped to a chatbot. Choose one to continue.
+            </p>
+            <button
+              type="button"
+              onClick={() => navigate('/app')}
+              className="px-6 py-3 bg-gradient-to-r from-emerald-600 to-teal-700 dark:from-violet-600 dark:to-indigo-700 text-white rounded-2xl font-bold"
+            >
+              Go to Chatbot Selection
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-full overflow-y-auto bg-gray-50 dark:bg-[#08080c]">

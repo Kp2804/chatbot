@@ -44,7 +44,7 @@ function RoleProtectedRoute({
   }
 
   if (!allow.includes(role)) {
-    return <Navigate to="/app/workflows" replace />;
+    return <Navigate to="/app" replace />;
   }
 
   return children;
