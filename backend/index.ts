@@ -643,6 +643,133 @@ async function retrieveRelevantChunks(chatbotId: string, message: string, conver
   return filterChunksBySimilarity(topChunks, RAG_FALLBACK_MIN_SIMILARITY, RAG_FALLBACK_MATCH_COUNT);
 }
 
+type PlanLimitResource = 'messages' | 'bots';
+
+const ACTIVE_SUBSCRIPTION_STATUSES = new Set(['active', 'past_due', 'trialing']);
+
+interface UserPlanAndUsage {
+  planName: string | null;
+  subscriptionStatus: string | null;
+  currentPeriodEnd: string | null;
+  messageLimit: number | null;
+  botLimit: number | null;
+  storageLimit: number | null;
+  messagesUsed: number;
+  botsCreated: number;
+}
+
+async function getUserPlanAndUsage(userId: string): Promise<UserPlanAndUsage> {
+  const { data: subscriptions, error: subscriptionsError } = await supabaseAdmin!
+    .from('subscriptions')
+    .select('status, current_period_end, created_at, plan:plans(name, message_limit, bot_limit, storage_limit)')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(10);
+
+  if (subscriptionsError) {
+    throw new Error(`Failed to fetch subscription: ${subscriptionsError.message}`);
+  }
+
+  const selectedSubscription = (subscriptions || []).find((row: any) => ACTIVE_SUBSCRIPTION_STATUSES.has(row.status))
+    || subscriptions?.[0]
+    || null;
+
+  const selectedPlanValue = selectedSubscription?.plan;
+  const selectedPlan = Array.isArray(selectedPlanValue)
+    ? (selectedPlanValue[0] || null)
+    : (selectedPlanValue || null);
+  const planName = selectedPlan?.name == null ? null : String(selectedPlan.name);
+  const messageLimit = selectedPlan?.message_limit == null ? null : Number(selectedPlan.message_limit);
+  const botLimit = selectedPlan?.bot_limit == null ? null : Number(selectedPlan.bot_limit);
+  const storageLimit = selectedPlan?.storage_limit == null ? null : Number(selectedPlan.storage_limit);
+
+  const { data: usageRow, error: usageError } = await supabaseAdmin!
+    .from('usage')
+    .select('messages_used, bots_created')
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (usageError) {
+    throw new Error(`Failed to fetch usage: ${usageError.message}`);
+  }
+
+  return {
+    planName,
+    subscriptionStatus: selectedSubscription?.status || null,
+    currentPeriodEnd: selectedSubscription?.current_period_end || null,
+    messageLimit,
+    botLimit,
+    storageLimit,
+    messagesUsed: Number(usageRow?.messages_used || 0),
+    botsCreated: Number(usageRow?.bots_created || 0),
+  };
+}
+
+async function resolveUserIdForPlanLimit(
+  req: Request,
+  res: Response,
+  resource: PlanLimitResource
+): Promise<string | null> {
+  if (!supabaseAdmin) {
+    res.status(503).json({ error: 'Supabase not configured' });
+    return null;
+  }
+
+  if (resource === 'bots') {
+    const user = await requireAuth(req, res);
+    if (!user) return null;
+    return user.id;
+  }
+
+  const chatbotId = req.body?.chatbotId;
+  if (!chatbotId) {
+    res.status(400).json({ error: 'chatbotId is required' });
+    return null;
+  }
+
+  const { data: chatbotRow, error: chatbotError } = await supabaseAdmin
+    .from('chatbots')
+    .select('user_id')
+    .eq('id', chatbotId)
+    .maybeSingle();
+
+  if (chatbotError) {
+    res.status(500).json({ error: chatbotError.message });
+    return null;
+  }
+
+  if (!chatbotRow?.user_id) {
+    res.status(404).json({ error: 'Chatbot not found' });
+    return null;
+  }
+
+  return chatbotRow.user_id;
+}
+
+function enforcePlanLimit(resource: PlanLimitResource) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const userId = await resolveUserIdForPlanLimit(req, res, resource);
+      if (!userId) return;
+
+      const { messageLimit, botLimit, messagesUsed, botsCreated } = await getUserPlanAndUsage(userId);
+
+      const exceededMessages = resource === 'messages' && messageLimit !== null && messagesUsed >= messageLimit;
+      const exceededBots = resource === 'bots' && botLimit !== null && botsCreated >= botLimit;
+
+      if (exceededMessages || exceededBots) {
+        return res.status(403).json({ error: 'Usage limit exceeded' });
+      }
+
+      res.locals.planLimitUserId = userId;
+      next();
+    } catch (error: any) {
+      console.error('Plan limit middleware error:', error?.message || error);
+      res.status(500).json({ error: 'Failed to enforce plan limits' });
+    }
+  };
+}
+
 // Rate limiting: 50 messages per user per day
 const MESSAGE_LIMIT_PER_DAY = 50;
 const userMessageCounts = new Map<string, { count: number; resetTime: number }>();
@@ -741,7 +868,7 @@ app.post('/api/translate', async (req: Request, res: Response) => {
 });
 
 // Chat completion endpoint (with rate limiting)
-app.post('/api/chat', rateLimitMiddleware, async (req: Request, res: Response) => {
+app.post('/api/chat', rateLimitMiddleware, enforcePlanLimit('messages'), async (req: Request, res: Response) => {
   try {
     const { message, chatbotContext, conversationHistory, userName, chatbotId, conversationId, lang } = req.body;
     const selectedLang: 'en' | 'hi' = lang === 'hi' ? 'hi' : 'en';
@@ -982,6 +1109,115 @@ async function requireChatbotOwner(userId: string, chatbotId: string, res: Respo
   }
   return true;
 }
+
+app.post('/api/chatbots', enforcePlanLimit('bots'), async (req: Request, res: Response) => {
+  try {
+    if (!supabaseAdmin) {
+      return res.status(503).json({ error: 'Supabase not configured' });
+    }
+
+    const authenticatedUserId = String(res.locals.planLimitUserId || '');
+    if (!authenticatedUserId) {
+      return res.status(401).json({ error: 'Invalid or expired token' });
+    }
+
+    const name = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
+    const description = typeof req.body?.description === 'string' ? req.body.description.trim() : '';
+
+    if (!name) {
+      return res.status(400).json({ error: 'name is required' });
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('chatbots')
+      .insert({
+        user_id: authenticatedUserId,
+        name,
+        description,
+      })
+      .select('*')
+      .single();
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    res.status(201).json(data);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to create chatbot' });
+  }
+});
+
+app.get('/api/chatbots/:chatbotId/limits', async (req: Request, res: Response) => {
+  try {
+    if (!supabaseAdmin) {
+      return res.status(503).json({ error: 'Supabase not configured' });
+    }
+
+    const chatbotId = Array.isArray(req.params.chatbotId) ? req.params.chatbotId[0] : req.params.chatbotId;
+    if (!chatbotId) {
+      return res.status(400).json({ error: 'chatbotId is required' });
+    }
+
+    const user = await requireAuth(req, res);
+    if (!user) return;
+
+    const owns = await requireChatbotOwner(user.id, chatbotId, res);
+    if (!owns) return;
+
+    const planUsage = await getUserPlanAndUsage(user.id);
+
+    const { count: activeChatbotCount, error: activeChatbotsError } = await supabaseAdmin
+      .from('chatbots')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', user.id);
+
+    if (activeChatbotsError) {
+      throw new Error(activeChatbotsError.message);
+    }
+
+    const messagesRemaining = planUsage.messageLimit === null
+      ? null
+      : Math.max(0, planUsage.messageLimit - planUsage.messagesUsed);
+
+    const botsRemaining = planUsage.botLimit === null
+      ? null
+      : Math.max(0, planUsage.botLimit - planUsage.botsCreated);
+
+    const activeBotsRemaining = planUsage.botLimit === null
+      ? null
+      : Math.max(0, planUsage.botLimit - Number(activeChatbotCount || 0));
+
+    res.json({
+      chatbotId,
+      plan: {
+        name: planUsage.planName,
+        status: planUsage.subscriptionStatus,
+        currentPeriodEnd: planUsage.currentPeriodEnd,
+        messageLimit: planUsage.messageLimit,
+        botLimit: planUsage.botLimit,
+        storageLimit: planUsage.storageLimit,
+      },
+      usage: {
+        messagesUsed: planUsage.messagesUsed,
+        botsCreated: planUsage.botsCreated,
+        activeChatbots: Number(activeChatbotCount || 0),
+      },
+      remaining: {
+        messages: messagesRemaining,
+        botsCreated: botsRemaining,
+        activeChatbots: activeBotsRemaining,
+      },
+      isExceeded: {
+        messages: planUsage.messageLimit !== null && planUsage.messagesUsed >= planUsage.messageLimit,
+        botsCreated: planUsage.botLimit !== null && planUsage.botsCreated >= planUsage.botLimit,
+        activeChatbots: planUsage.botLimit !== null && Number(activeChatbotCount || 0) >= planUsage.botLimit,
+      },
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to load chatbot limits' });
+  }
+});
 
 // ── Knowledge Base endpoints ─────────────────────────────────────────────────
 

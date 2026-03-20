@@ -22,6 +22,32 @@ interface KBSource {
   created_at: string;
 }
 
+interface ChatbotLimitsResponse {
+  plan: {
+    name: string | null;
+    status: string | null;
+    currentPeriodEnd: string | null;
+    messageLimit: number | null;
+    botLimit: number | null;
+    storageLimit: number | null;
+  };
+  usage: {
+    messagesUsed: number;
+    botsCreated: number;
+    activeChatbots: number;
+  };
+  remaining: {
+    messages: number | null;
+    botsCreated: number | null;
+    activeChatbots: number | null;
+  };
+  isExceeded: {
+    messages: boolean;
+    botsCreated: boolean;
+    activeChatbots: boolean;
+  };
+}
+
 export function ChatbotManagePage() {
   const navigate = useNavigate();
   const { chatbotId } = useParams();
@@ -33,6 +59,9 @@ export function ChatbotManagePage() {
   // Knowledge Base state
   const [kbSources, setKbSources] = useState<KBSource[]>([]);
   const [kbLoading, setKbLoading] = useState(false);
+  const [limitsLoading, setLimitsLoading] = useState(false);
+  const [limits, setLimits] = useState<ChatbotLimitsResponse | null>(null);
+  const [limitsError, setLimitsError] = useState('');
   const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'done' | 'error'>('idle');
   const [uploadMessage, setUploadMessage] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -52,6 +81,7 @@ export function ChatbotManagePage() {
     localStorage.setItem("activeChatbotId", chatbotId);
     fetchChatbot(chatbotId);
     fetchKBSources(chatbotId);
+    fetchChatbotLimits(chatbotId);
   }, [chatbotId, navigate]);
 
   if (blocked) {
@@ -107,6 +137,28 @@ export function ChatbotManagePage() {
       console.error("Failed loading KB sources:", e);
     } finally {
       setKbLoading(false);
+    }
+  };
+
+  const fetchChatbotLimits = async (id: string) => {
+    try {
+      setLimitsLoading(true);
+      setLimitsError('');
+      const token = await getAccessToken();
+      const res = await fetch(`${backendUrl}/api/chatbots/${id}/limits`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data?.error || 'Failed to load usage limits');
+      }
+
+      setLimits(data as ChatbotLimitsResponse);
+    } catch (error: any) {
+      setLimitsError(error?.message || 'Failed to load usage limits');
+    } finally {
+      setLimitsLoading(false);
     }
   };
 
@@ -240,6 +292,73 @@ export function ChatbotManagePage() {
           >
             <Save className="w-4 h-4" /> {saving ? "Saving..." : "Save Name"}
           </button>
+        </div>
+
+        <div className="bg-white/[0.02] border border-white/10 rounded-3xl p-6 space-y-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-white" style={{ fontSize: "0.95rem", fontWeight: 700 }}>Plan Usage & Limits</h2>
+              <p className="text-gray-500" style={{ fontSize: "0.75rem" }}>
+                {limits?.plan.name ? `${limits.plan.name} plan` : 'No plan selected'}
+                {limits?.plan.status ? ` · ${limits.plan.status}` : ''}
+              </p>
+            </div>
+            {limits?.plan.currentPeriodEnd && (
+              <p className="text-gray-500" style={{ fontSize: "0.72rem" }}>
+                Renews {new Date(limits.plan.currentPeriodEnd).toLocaleDateString()}
+              </p>
+            )}
+          </div>
+
+          {limitsLoading ? (
+            <div className="flex items-center gap-2 text-gray-500 text-sm">
+              <Loader2 className="w-4 h-4 animate-spin" /> Loading usage limits…
+            </div>
+          ) : limitsError ? (
+            <p className="text-red-400 text-sm">{limitsError}</p>
+          ) : limits ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="bg-white/[0.03] border border-white/10 rounded-xl p-3">
+                <p className="text-gray-400 text-xs">Messages</p>
+                <p className="text-white text-sm mt-1">
+                  {limits.usage.messagesUsed} / {limits.plan.messageLimit ?? 'Unlimited'}
+                </p>
+                <p className={`text-xs mt-1 ${limits.isExceeded.messages ? 'text-red-400' : 'text-gray-500'}`}>
+                  Remaining: {limits.remaining.messages ?? 'Unlimited'}
+                </p>
+              </div>
+
+              <div className="bg-white/[0.03] border border-white/10 rounded-xl p-3">
+                <p className="text-gray-400 text-xs">Bots Created (lifetime counter)</p>
+                <p className="text-white text-sm mt-1">
+                  {limits.usage.botsCreated} / {limits.plan.botLimit ?? 'Unlimited'}
+                </p>
+                <p className={`text-xs mt-1 ${limits.isExceeded.botsCreated ? 'text-red-400' : 'text-gray-500'}`}>
+                  Remaining: {limits.remaining.botsCreated ?? 'Unlimited'}
+                </p>
+              </div>
+
+              <div className="bg-white/[0.03] border border-white/10 rounded-xl p-3">
+                <p className="text-gray-400 text-xs">Active Chatbots</p>
+                <p className="text-white text-sm mt-1">
+                  {limits.usage.activeChatbots} / {limits.plan.botLimit ?? 'Unlimited'}
+                </p>
+                <p className={`text-xs mt-1 ${limits.isExceeded.activeChatbots ? 'text-red-400' : 'text-gray-500'}`}>
+                  Remaining: {limits.remaining.activeChatbots ?? 'Unlimited'}
+                </p>
+              </div>
+
+              <div className="bg-white/[0.03] border border-white/10 rounded-xl p-3">
+                <p className="text-gray-400 text-xs">Storage Limit</p>
+                <p className="text-white text-sm mt-1">
+                  {limits.plan.storageLimit ?? 'Unlimited'}
+                </p>
+                <p className="text-gray-500 text-xs mt-1">Plan-level storage cap</p>
+              </div>
+            </div>
+          ) : (
+            <p className="text-gray-500 text-sm">No usage data available yet.</p>
+          )}
         </div>
 
         {/* Knowledge Base Section */}

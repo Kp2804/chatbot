@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { Bot, Plus, ArrowRight, RefreshCw } from "lucide-react";
-import { supabase } from "../../../lib/supabase";
+import { getAccessToken, supabase } from "../../../lib/supabase";
 
 interface Chatbot {
   id: string;
@@ -19,10 +19,38 @@ export function ChatbotSelectionPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newChatbotName, setNewChatbotName] = useState("");
   const [chatbots, setChatbots] = useState<Chatbot[]>([]);
+  const [createError, setCreateError] = useState("");
+  const backendUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:3001";
 
   useEffect(() => {
     fetchChatbots();
   }, []);
+
+  const createChatbotViaBackend = async (name: string, description: string) => {
+    const token = await getAccessToken();
+    if (!token) {
+      throw new Error("Please sign in to create a chatbot");
+    }
+
+    const response = await fetch(`${backendUrl}/api/chatbots`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ name, description }),
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const message = typeof payload?.error === "string"
+        ? payload.error
+        : `Failed to create chatbot (${response.status})`;
+      throw new Error(message);
+    }
+
+    return payload as Chatbot;
+  };
 
   const fetchChatbots = async () => {
     try {
@@ -44,19 +72,7 @@ export function ChatbotSelectionPage() {
 
       const list = data || [];
       if (list.length === 0) {
-        const { data: created, error: createError } = await supabase
-          .from("chatbots")
-          .insert([
-            {
-              user_id: currentUser.id,
-              name: "My Chatbot",
-              description: "Default chatbot",
-            },
-          ])
-          .select()
-          .single();
-
-        if (createError) throw createError;
+        const created = await createChatbotViaBackend("My Chatbot", "Default chatbot");
         setChatbots([created]);
         return;
       }
@@ -78,29 +94,20 @@ export function ChatbotSelectionPage() {
     if (!currentUser) return;
 
     setCreating(true);
+    setCreateError("");
 
-    const { data, error } = await supabase
-      .from("chatbots")
-      .insert([
-        {
-          user_id: currentUser.id,
-          name: trimmedName,
-          description: "",
-        },
-      ])
-      .select()
-      .single();
-
-    if (error) {
-      console.error("Error creating chatbot:", error.message);
+    try {
+      const data = await createChatbotViaBackend(trimmedName, "");
+      setChatbots((prev) => [...prev, data]);
+      setNewChatbotName("");
+      setShowCreateModal(false);
+    } catch (error: any) {
+      const message = error?.message || "Error creating chatbot";
+      setCreateError(message);
+      console.error("Error creating chatbot:", message);
+    } finally {
       setCreating(false);
-      return;
     }
-
-    setChatbots((prev) => [...prev, data]);
-    setNewChatbotName("");
-    setShowCreateModal(false);
-    setCreating(false);
   };
 
   const handleSelectChatbot = (chatbotId: string) => {
@@ -206,6 +213,12 @@ export function ChatbotSelectionPage() {
                     style={{ fontSize: "0.85rem" }}
                   />
                 </div>
+
+                {createError && (
+                  <p className="text-red-600 dark:text-red-300" style={{ fontSize: "0.75rem" }}>
+                    {createError}
+                  </p>
+                )}
 
               </div>
 
