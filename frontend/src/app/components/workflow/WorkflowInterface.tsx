@@ -5,11 +5,12 @@ import {
   GitBranch, CheckCircle2, XCircle, Clock, Zap, MessageSquare,
   Mail, Globe, Database, ArrowRight, Filter, Search,
   ChevronDown, ChevronRight, X, AlertTriangle, GripVertical,
-  ArrowUp, ArrowDown, Layout, Menu, Settings, List, RefreshCw
+  ArrowUp, ArrowDown, Layout, Menu, Settings, List, RefreshCw, Lock
 } from "lucide-react";
 import { motion } from "motion/react";
 import { useNavigate } from "react-router";
 import { supabase } from "../../../lib/supabase";
+import { fetchBillingState } from "../billing/billingApi";
 
 /* ─── Types ─── */
 
@@ -139,6 +140,8 @@ function ConfirmModal({ title, message, onConfirm, onCancel }: { title: string; 
 
 /* ─── Main Interface Component ─── */
 
+const ACTIVE_SUBSCRIPTION_STATUSES = new Set(["active", "past_due", "trialing"]);
+
 export function WorkflowInterface() {
   const navigate = useNavigate();
   const activeChatbotId = localStorage.getItem("activeChatbotId");
@@ -152,6 +155,25 @@ export function WorkflowInterface() {
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: "success" | "info" } | null>(null);
   const [previewModeByWorkflow, setPreviewModeByWorkflow] = useState<Record<string, "structure" | "visual">>({});
+  const [hasActivePlan, setHasActivePlan] = useState(false);;
+
+  useEffect(() => {
+    const loadBillingState = async () => {
+      try {
+        const { data: userData } = await supabase.auth.getUser();
+        if (userData.user) {
+          const billingState = await fetchBillingState(userData.user.id);
+          const isPlanActive = billingState.subscription
+            ? ACTIVE_SUBSCRIPTION_STATUSES.has(String(billingState.subscription.status || "").toLowerCase())
+            : false;
+          setHasActivePlan(isPlanActive);
+        }
+      } catch (error) {
+        console.error('Failed to load billing state:', error);
+      }
+    };
+    loadBillingState();
+  }, []);
 
   useEffect(() => {
     if (!activeChatbotId) return;
@@ -192,6 +214,10 @@ export function WorkflowInterface() {
 
 
   const handleDuplicate = async (wf: Workflow) => {
+    if (!hasActivePlan) {
+      showToast("Duplicate workflow requires an active plan", "info");
+      return;
+    }
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Identification missing.");
@@ -227,6 +253,10 @@ export function WorkflowInterface() {
   };
 
   const handleToggleStatus = async (id: string, currentStatus: string) => {
+    if (!hasActivePlan) {
+      showToast("Saving workflow status requires an active plan", "info");
+      return;
+    }
     try {
       const next: Workflow["status"] = currentStatus === "active" ? "paused" : "active";
       const { error } = await supabase
@@ -243,6 +273,10 @@ export function WorkflowInterface() {
   };
 
   const handleDelete = async (id: string) => {
+    if (!hasActivePlan) {
+      showToast("Deleting workflows requires an active plan", "info");
+      return;
+    }
     try {
       const { error } = await supabase
         .from('workflows')

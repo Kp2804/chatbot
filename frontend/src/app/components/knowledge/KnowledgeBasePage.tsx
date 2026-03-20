@@ -16,8 +16,10 @@ import {
   ShieldCheck,
   Upload,
   Trash2,
+  Lock,
 } from "lucide-react";
-import { getAccessToken } from "../../../lib/supabase";
+import { getAccessToken, supabase } from "../../../lib/supabase";
+import { fetchBillingState } from "../billing/billingApi";
 
 type WebsiteScope = "single_page" | "linked_pages" | "full_domain" | "specific_paths_only";
 type SyncFrequency = "manual" | "weekly" | "monthly";
@@ -112,6 +114,7 @@ const STAGES = [
 
 const MAX_PDF_UPLOADS = 5;
 const MAX_PDF_BYTES = 5 * 1024 * 1024;
+const ACTIVE_SUBSCRIPTION_STATUSES = new Set(["active", "past_due", "trialing"]);
 
 const scopeOptions: Array<{ value: WebsiteScope; label: string; desc: string }> = [
   { value: "single_page", label: "Single page", desc: "Only this URL" },
@@ -124,6 +127,7 @@ export function KnowledgeBasePage() {
   const navigate = useNavigate();
   const [view, setView] = useState<"documents" | "website">("website");
   const [chatbotId, setChatbotId] = useState<string | null>(null);
+  const [hasActivePlan, setHasActivePlan] = useState(false);
   const backendUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:3001";
 
   const [url, setUrl] = useState("");
@@ -177,6 +181,22 @@ export function KnowledgeBasePage() {
     }
     setChatbotId(activeId);
     fetchSources(activeId);
+
+    const loadBillingState = async () => {
+      try {
+        const { data: userData } = await supabase.auth.getUser();
+        if (userData.user) {
+          const billingState = await fetchBillingState(userData.user.id);
+          const isPlanActive = billingState.subscription
+            ? ACTIVE_SUBSCRIPTION_STATUSES.has(String(billingState.subscription.status || "").toLowerCase())
+            : false;
+          setHasActivePlan(isPlanActive);
+        }
+      } catch (error) {
+        console.error('Failed to load billing state:', error);
+      }
+    };
+    loadBillingState();
   }, [navigate]);
 
   useEffect(() => {
@@ -205,6 +225,12 @@ export function KnowledgeBasePage() {
 
   const handlePreview = async () => {
     if (!chatbotId || !url.trim()) return;
+    
+    if (!hasActivePlan) {
+      setError("Previewing websites requires an active plan");
+      return;
+    }
+    
     setError(null);
     setPreviewLoading(true);
     try {
@@ -230,6 +256,12 @@ export function KnowledgeBasePage() {
 
   const handleIndex = async () => {
     if (!chatbotId || !url.trim()) return;
+    
+    if (!hasActivePlan) {
+      setError("Indexing websites requires an active plan");
+      return;
+    }
+    
     if (websiteLock.activeHost && websiteLock.requestedHost && websiteLock.hasConflict) {
       setError(
         `This chatbot already has indexed website memory for "${websiteLock.activeHost}". Clear existing website memory before indexing another website.`
@@ -297,6 +329,12 @@ export function KnowledgeBasePage() {
 
   const handleDelete = async (sourceId: string) => {
     if (!chatbotId) return;
+    
+    if (!hasActivePlan) {
+      setError("Deleting sources requires an active plan");
+      return;
+    }
+    
     const confirmed = window.confirm("Remove this indexed page and its chunks?");
     if (!confirmed) return;
     try {
@@ -315,6 +353,12 @@ export function KnowledgeBasePage() {
 
   const handleClearWebsiteMemory = async () => {
     if (!chatbotId) return;
+    
+    if (!hasActivePlan) {
+      setError("Clearing website memory requires an active plan");
+      return;
+    }
+    
     const confirmed = window.confirm(
       "Clear all indexed website data for this chatbot? This removes only website-indexed pages and their chunks. Uploaded PDFs are not deleted."
     );
@@ -360,6 +404,11 @@ export function KnowledgeBasePage() {
   };
 
   const handleReindex = async (sourceId: string) => {
+    if (!hasActivePlan) {
+      setError("Reindexing requires an active plan");
+      return;
+    }
+    
     try {
       const token = await getAccessToken();
       const res = await fetch(`${backendUrl}/api/knowledge/website/source/${sourceId}/reindex`, {
@@ -375,6 +424,11 @@ export function KnowledgeBasePage() {
   };
 
   const handlePriorityToggle = async (sourceId: string, current: boolean) => {
+    if (!hasActivePlan) {
+      setError("Toggling priority requires an active plan");
+      return;
+    }
+    
     try {
       const token = await getAccessToken();
       const res = await fetch(`${backendUrl}/api/knowledge/website/source/${sourceId}`, {
@@ -420,6 +474,14 @@ export function KnowledgeBasePage() {
 
   const handlePDFUpload = async (file: File) => {
     if (!chatbotId) return;
+    
+    if (!hasActivePlan) {
+      setUploadStatus("error");
+      setUploadMessage("Uploading documents requires an active plan");
+      setTimeout(() => setUploadStatus("idle"), 3000);
+      return;
+    }
+    
     if (pdfSources.length >= MAX_PDF_UPLOADS) {
       setUploadStatus("error");
       setUploadMessage(`PDF limit reached (${MAX_PDF_UPLOADS}/${MAX_PDF_UPLOADS}). Delete one to upload another.`);

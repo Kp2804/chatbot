@@ -3,9 +3,10 @@ import { useNavigate } from "react-router";
 import {
   Plus, Search, Edit2, Trash2, ChevronDown, ChevronUp,
   Eye, Star, Download, Upload, HelpCircle, CheckCircle2,
-  XCircle, ThumbsUp, ThumbsDown, Copy, X, AlertTriangle,
+  XCircle, ThumbsUp, ThumbsDown, Copy, X, AlertTriangle, Lock,
 } from "lucide-react";
 import { supabase } from "../../../lib/supabase";
+import { fetchBillingState } from "../billing/billingApi";
 
 interface FAQ {
   id: string;
@@ -23,6 +24,7 @@ interface FAQ {
 }
 
 const INITIAL_FAQS: FAQ[] = [];
+const ACTIVE_SUBSCRIPTION_STATUSES = new Set(["active", "past_due", "trialing"]);
 
 function StatusBadge({ status }: { status: FAQ["status"] }) {
   if (status === "published") return (
@@ -108,11 +110,28 @@ export function FAQManager() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "published" | "draft">("all");
   const [expandedId, setExpandedId] = useState<string | null>(null);
-
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: "success" | "info" } | null>(null);
-
+  const [hasActivePlan, setHasActivePlan] = useState(false);
   const importRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const loadBillingState = async () => {
+      try {
+        const { data: userData } = await supabase.auth.getUser();
+        if (userData.user) {
+          const billingState = await fetchBillingState(userData.user.id);
+          const isPlanActive = billingState.subscription
+            ? ACTIVE_SUBSCRIPTION_STATUSES.has(String(billingState.subscription.status || "").toLowerCase())
+            : false;
+          setHasActivePlan(isPlanActive);
+        }
+      } catch (error) {
+        console.error('Failed to load billing state:', error);
+      }
+    };
+    loadBillingState();
+  }, []);
 
   useEffect(() => {
     if (!activeChatbotId) return;
@@ -153,6 +172,10 @@ export function FAQManager() {
   });
 
   const toggleFeatured = async (id: string, current: boolean) => {
+    if (!hasActivePlan) {
+      showToast("Editing requires an active plan", "info");
+      return;
+    }
     try {
       const { error } = await supabase
         .from('faqs')
@@ -167,6 +190,10 @@ export function FAQManager() {
   };
 
   const deleteFaq = async (id: string) => {
+    if (!hasActivePlan) {
+      showToast("Deleting FAQs requires an active plan", "info");
+      return;
+    }
     try {
       const { error } = await supabase
         .from('faqs')
@@ -184,6 +211,10 @@ export function FAQManager() {
   };
 
   const duplicateFaq = async (faq: FAQ) => {
+    if (!hasActivePlan) {
+      showToast("Creating FAQs requires an active plan", "info");
+      return;
+    }
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");

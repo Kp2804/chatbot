@@ -295,33 +295,38 @@ export function Layout() {
               Main Menu
             </p>
           )}
-          {navItems.map((item) => (
-            <NavLink
-              key={item.path}
-              to={item.path === "/app/chat" ? chatNavPath : item.path}
-              end={item.exact}
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group ${isActive
-                  ? "bg-violet-500/15 text-violet-400 border border-violet-500/20"
-                  : "text-gray-500 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-200 dark:hover:bg-white/5"
-                } ${collapsed ? "justify-center" : ""}`
-              }
-            >
-              {({ isActive }) => (
-                <>
-                  <item.icon className={`w-[18px] h-[18px] flex-shrink-0 ${isActive ? "text-violet-400" : ""}`} />
-                  {!collapsed && (
-                    <span style={{ fontSize: "0.875rem", fontWeight: isActive ? 600 : 400 }}>
-                      {item.label}
-                    </span>
-                  )}
-                  {!collapsed && isActive && (
-                    <div className="ml-auto w-1.5 h-1.5 bg-violet-400 rounded-full" />
-                  )}
-                </>
-              )}
-            </NavLink>
-          ))}
+          {navItems.map((item) => {
+            const isChat = item.path === "/app/chat";
+            const isChatbots = item.path === "/app/chatbots";
+            const pathname = location.pathname;
+            const isActive = isChat
+              ? pathname.startsWith("/app/chat/")
+              : isChatbots
+              ? pathname === "/app/chatbots"
+              : pathname === item.path;
+
+            return (
+              <NavLink
+                key={item.path}
+                to={isChat ? chatNavPath : item.path}
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group ${
+                  isActive
+                    ? "bg-violet-500/15 text-violet-400 border border-violet-500/20"
+                    : "text-gray-500 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-200 dark:hover:bg-white/5"
+                } ${collapsed ? "justify-center" : ""}`}
+              >
+                <item.icon className={`w-[18px] h-[18px] flex-shrink-0 ${isActive ? "text-violet-400" : ""}`} />
+                {!collapsed && (
+                  <span style={{ fontSize: "0.875rem", fontWeight: isActive ? 600 : 400 }}>
+                    {item.label}
+                  </span>
+                )}
+                {!collapsed && isActive && (
+                  <div className="ml-auto w-1.5 h-1.5 bg-violet-400 rounded-full" />
+                )}
+              </NavLink>
+            );
+          })}
 
           {/* Knowledge Base — chatbot-scoped */}
           <KnowledgeBaseNavItem collapsed={collapsed} chatbotId={activeChatbotId} />
