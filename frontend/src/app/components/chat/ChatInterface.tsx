@@ -4,7 +4,7 @@ import {
   Send, Bot, Plus, Search,
   Smile, ThumbsUp, ThumbsDown, Copy, RefreshCw,
   Sparkles, Clock, Check, Star, Trash2, HelpCircle,
-  ArrowRight, Layout, Mic, MicOff, Paperclip, FileText, ChevronUp
+  ArrowRight, Layout, Mic, MicOff, Paperclip, FileText, ChevronUp, Sun, Moon
 } from "lucide-react";
 import EmojiPicker, { EmojiClickData } from "emoji-picker-react";
 import { supabase, getAccessToken } from "../../../lib/supabase";
@@ -210,6 +210,31 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
   const translatedMessageCacheRef = useRef<Record<string, Record<AppLanguage, string>>>({});
   const lastLanguageRef = useRef<AppLanguage>(language);
   const lastMessageCountRef = useRef(0);
+  const [embeddedTheme, setEmbeddedTheme] = useState<"dark" | "light">(
+    document.documentElement.classList.contains("dark") ? "dark" : "light"
+  );
+
+  useEffect(() => {
+    if (!embedded) return;
+
+    const onThemeMessage = (event: MessageEvent) => {
+      const data = event.data;
+      if (!data || data.type !== "nexus-widget-theme") return;
+      if (data.theme === "dark" || data.theme === "light") {
+        setEmbeddedTheme(data.theme);
+      }
+    };
+
+    window.addEventListener("message", onThemeMessage);
+    return () => window.removeEventListener("message", onThemeMessage);
+  }, [embedded]);
+
+  const handleEmbeddedThemeToggle = () => {
+    if (!embedded || window.parent === window) return;
+    const nextTheme = embeddedTheme === "dark" ? "light" : "dark";
+    setEmbeddedTheme(nextTheme);
+    window.parent.postMessage({ type: "nexus-widget-theme-toggle" }, "*");
+  };
 
   useEffect(() => {
     localStorage.setItem('app_lang', language);
@@ -1113,6 +1138,17 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
                   {t('chat.active')}
                 </div>
               </div>
+              {embedded && (
+                <button
+                  type="button"
+                  onClick={handleEmbeddedThemeToggle}
+                  className="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-100 dark:bg-white/5 border border-gray-300 dark:border-white/10 text-gray-700 dark:text-purple-200 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-white/10 transition-all"
+                  title={embeddedTheme === "dark" ? "Switch chatbot to light mode" : "Switch chatbot to dark mode"}
+                  aria-label={embeddedTheme === "dark" ? "Switch chatbot to light mode" : "Switch chatbot to dark mode"}
+                >
+                  {embeddedTheme === "dark" ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
+                </button>
+              )}
               {embedded && <LanguageSwitcher language={language} onChange={setLanguage} className="ml-1" />}
             </div>
             <div className="flex items-center gap-2">

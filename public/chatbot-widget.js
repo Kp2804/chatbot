@@ -9,10 +9,54 @@
   const panelWidth = script?.getAttribute("data-width") || "360px";
   const panelHeight = script?.getAttribute("data-height") || "560px";
   const userName = script?.getAttribute("data-user-name") || "";
+  const themePreference = (script?.getAttribute("data-theme") || "auto").toLowerCase();
+  const storageThemeKey = "nexusChatbotWidgetTheme";
 
   if (!chatbotId) {
     console.error("[Chatbot Widget] Missing data-chatbot-id attribute");
     return;
+  }
+
+  const WEBSITE_SCHEME = {
+    light: {
+      panelBg: "#ffffff",
+      panelBorder: "#bbf7d0",
+      panelShadow: "0 16px 40px rgba(5, 150, 105, 0.2)",
+      iframeBg: "#ffffff",
+      launcherGradient: "linear-gradient(135deg,#059669,#047857)",
+      launcherShadow: "0 10px 30px rgba(5, 150, 105, 0.35)",
+      launcherText: "#ffffff",
+    },
+    dark: {
+      panelBg: "#111019",
+      panelBorder: "#31214a",
+      panelShadow: "0 16px 40px rgba(0, 0, 0, 0.45)",
+      iframeBg: "#111019",
+      launcherGradient: "linear-gradient(135deg,#7c3aed,#4f46e5)",
+      launcherShadow: "0 10px 30px rgba(79, 70, 229, 0.45)",
+      launcherText: "#f5f3ff",
+    },
+  };
+
+  function getThemeFromPreference() {
+    try {
+      const savedTheme = localStorage.getItem(storageThemeKey);
+      if (savedTheme === "light" || savedTheme === "dark") return savedTheme;
+    } catch (_) {
+      // ignore localStorage errors in restricted contexts
+    }
+
+    if (themePreference === "light" || themePreference === "dark") {
+      return themePreference;
+    }
+
+    if (document.documentElement.classList.contains("dark")) {
+      return "dark";
+    }
+
+    return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches
+      ? "dark"
+      : "light";
   }
 
   // Auto-detect user name from common page elements if not provided
@@ -79,9 +123,10 @@
   
   // Build URL with user name parameter
   const detectedUserName = detectUserName();
-  let iframeUrl = `${appUrl}/embed/${encodeURIComponent(chatbotId)}`;
+  let currentTheme = getThemeFromPreference();
+  let iframeUrl = `${appUrl}/embed/${encodeURIComponent(chatbotId)}?theme=${encodeURIComponent(currentTheme)}`;
   if (detectedUserName) {
-    iframeUrl += `?userName=${encodeURIComponent(detectedUserName)}`;
+    iframeUrl += `&userName=${encodeURIComponent(detectedUserName)}`;
     console.log('[Chatbot Widget] Final iframe URL:', iframeUrl);
   } else {
     console.log('[Chatbot Widget] No userName - iframe URL:', iframeUrl);
@@ -108,6 +153,54 @@
   launcher.style.background = "linear-gradient(135deg,#7c3aed,#4f46e5)";
   launcher.style.boxShadow = "0 10px 30px rgba(79,70,229,0.45)";
   launcher.style.color = "#fff";
+
+  function sendThemeToIframe() {
+    if (!iframe.contentWindow) return;
+    iframe.contentWindow.postMessage(
+      { type: "nexus-widget-theme", theme: currentTheme },
+      "*"
+    );
+  }
+
+  function applyWidgetTheme() {
+    const palette = WEBSITE_SCHEME[currentTheme];
+
+    panel.style.background = palette.panelBg;
+    panel.style.border = `1px solid ${palette.panelBorder}`;
+    panel.style.boxShadow = palette.panelShadow;
+    iframe.style.background = palette.iframeBg;
+
+    launcher.style.background = palette.launcherGradient;
+    launcher.style.boxShadow = palette.launcherShadow;
+    launcher.style.color = palette.launcherText;
+
+    sendThemeToIframe();
+  }
+
+  window.addEventListener("message", function (event) {
+    const data = event.data;
+    if (!data) return;
+
+    if (data.type === "nexus-widget-theme-toggle") {
+      currentTheme = currentTheme === "dark" ? "light" : "dark";
+    } else if (data.type === "nexus-widget-theme-change" && (data.theme === "dark" || data.theme === "light")) {
+      currentTheme = data.theme;
+    } else {
+      return;
+    }
+
+    try {
+      localStorage.setItem(storageThemeKey, currentTheme);
+    } catch (_) {
+      // ignore localStorage errors in restricted contexts
+    }
+
+    applyWidgetTheme();
+  });
+
+  iframe.addEventListener("load", function () {
+    sendThemeToIframe();
+  });
 
   if (iconUrl) {
     const img = document.createElement("img");
@@ -148,6 +241,8 @@
       panel.style.display = "none";
     }
   });
+
+  applyWidgetTheme();
 
   container.appendChild(panel);
   container.appendChild(launcher);
