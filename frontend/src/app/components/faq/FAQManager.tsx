@@ -102,6 +102,7 @@ function ConfirmModal({ title, message, onConfirm, onCancel }: ConfirmModalProps
 export function FAQManager() {
   const navigate = useNavigate();
   const activeChatbotId = localStorage.getItem("activeChatbotId");
+  const hasActiveChatbot = Boolean(activeChatbotId);
   const [faqList, setFaqList] = useState<FAQ[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -114,10 +115,7 @@ export function FAQManager() {
   const importRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (!activeChatbotId) {
-      navigate('/app');
-      return;
-    }
+    if (!activeChatbotId) return;
     fetchFAQs();
   }, [activeChatbotId]);
 
@@ -330,14 +328,22 @@ export function FAQManager() {
             </button>
             <button
               type="button"
-              onClick={() => navigate("/app/faq/new")}
+              onClick={() => navigate(hasActiveChatbot ? "/app/faq/new" : "/app")}
               className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-violet-500 to-indigo-600 hover:from-violet-600 hover:to-indigo-700 text-white rounded-xl transition-all shadow-lg shadow-violet-500/25"
               style={{ fontSize: "0.875rem", fontWeight: 600 }}
             >
-              <Plus className="w-4 h-4" /> Add FAQ
+              <Plus className="w-4 h-4" /> {hasActiveChatbot ? "Add FAQ" : "Select Chatbot to Add FAQ"}
             </button>
           </div>
         </div>
+
+        {!hasActiveChatbot && (
+          <div className="mb-6 rounded-xl border border-amber-300/40 bg-amber-100/70 dark:border-amber-500/40 dark:bg-amber-500/10 px-4 py-3">
+            <p className="text-amber-900 dark:text-amber-200" style={{ fontSize: "0.82rem", fontWeight: 600 }}>
+              Preview mode: browse FAQ manager layout and controls. Select a chatbot from sidebar to create and publish FAQs.
+            </p>
+          </div>
+        )}
 
         {/* Stats */}
         <div className="grid grid-cols-4 gap-4 mb-6">

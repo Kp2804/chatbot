@@ -142,6 +142,7 @@ function ConfirmModal({ title, message, onConfirm, onCancel }: { title: string; 
 export function WorkflowInterface() {
   const navigate = useNavigate();
   const activeChatbotId = localStorage.getItem("activeChatbotId");
+  const hasActiveChatbot = Boolean(activeChatbotId);
   const previewSectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -284,29 +285,6 @@ export function WorkflowInterface() {
     setPreviewModeByWorkflow((prev) => ({ ...prev, [workflowId]: mode }));
   };
 
-  if (!activeChatbotId) {
-    return (
-      <div className="h-full overflow-y-auto bg-gray-50 dark:bg-[#08080c]">
-        <div className="max-w-4xl mx-auto p-10">
-          <div className="text-center py-24 bg-white dark:bg-[#111019] border border-gray-200 dark:border-white/10 rounded-3xl">
-            <GitBranch className="w-14 h-14 mx-auto mb-5 text-emerald-500/60 dark:text-violet-400/70" />
-            <h2 className="text-gray-900 dark:text-white text-2xl font-black mb-2">Select a chatbot first</h2>
-            <p className="text-gray-500 dark:text-gray-400 mb-8">
-              Workflows are scoped to a chatbot. Choose one to continue.
-            </p>
-            <button
-              type="button"
-              onClick={() => navigate('/app')}
-              className="px-6 py-3 bg-gradient-to-r from-emerald-600 to-teal-700 dark:from-violet-600 dark:to-indigo-700 text-white rounded-2xl font-bold"
-            >
-              Go to Chatbot Selection
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="h-full overflow-y-auto bg-gray-50 dark:bg-[#08080c]">
       <div className="max-w-6xl mx-auto p-10">
@@ -319,14 +297,22 @@ export function WorkflowInterface() {
           </div>
           <button
             type="button"
-            onClick={() => navigate("/app/workflows/new")}
+            onClick={() => navigate(hasActiveChatbot ? "/app/workflows/new" : "/app")}
             className="group flex items-center gap-3 px-8 py-4 bg-gradient-to-br from-emerald-600 to-teal-700 dark:from-violet-600 dark:to-indigo-800 hover:from-emerald-700 hover:to-teal-800 dark:hover:from-violet-500 dark:hover:to-indigo-700 text-white rounded-3xl transition-all shadow-3xl shadow-emerald-600/30 dark:shadow-violet-600/30 font-black tracking-tight"
             style={{ fontSize: "1rem" }}
           >
             <Plus className="w-5 h-5 group-hover:rotate-90 transition-transform duration-500" />
-            Establish Workflow
+            {hasActiveChatbot ? "Establish Workflow" : "Select Chatbot to Build"}
           </button>
         </div>
+
+        {!hasActiveChatbot && (
+          <div className="mb-8 rounded-2xl border border-amber-300/40 bg-amber-100/70 dark:border-amber-500/40 dark:bg-amber-500/10 px-4 py-3">
+            <p className="text-amber-900 dark:text-amber-200" style={{ fontSize: "0.82rem", fontWeight: 600 }}>
+              Preview mode: you can explore workflow UI and structure. Select a chatbot from sidebar to create and save real workflows.
+            </p>
+          </div>
+        )}
 
         <div className="grid grid-cols-4 gap-6 mb-12">
           {[
