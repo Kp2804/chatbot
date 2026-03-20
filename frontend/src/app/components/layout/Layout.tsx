@@ -21,6 +21,7 @@ import {
   CreditCard,
   Shield,
   Users,
+  CirclePlus,
 } from "lucide-react";
 import { supabase } from "../../../lib/supabase";
 import { useUserRole } from "../../hooks/useUserRole";
@@ -42,6 +43,7 @@ type NavItem = {
 };
 
 const navItems: NavItem[] = [
+  { path: "/app/chatbots", icon: CirclePlus, label: "Create Chatbot" },
   { path: "/app/chat", icon: MessageSquare, label: "Chat" },
   { path: "/app/workflows", icon: GitBranch, label: "Workflows" },
   { path: "/app/faq", icon: HelpCircle, label: "FAQ Manager" },
@@ -87,7 +89,7 @@ export function Layout() {
   const location = useLocation();
   const { user, role, loading: roleLoading, isAdmin, isSuperAdmin } = useUserRole();
   const activeChatbotId = localStorage.getItem("activeChatbotId");
-  const chatNavPath = activeChatbotId ? `/app/chat/${activeChatbotId}` : "/app";
+  const chatNavPath = activeChatbotId ? `/app/chat/${activeChatbotId}` : "/app/chatbots";
   const isSelectionScreen = location.pathname === "/app";
 
   const formatNotificationTime = (date: Date) => {
@@ -273,7 +275,7 @@ export function Layout() {
 
         {/* Logo */}
         <div 
-          onClick={() => navigate('/app')}
+          onClick={() => navigate('/app/workflows')}
           className={`flex items-center gap-3 px-4 py-5 border-b border-gray-300 dark:border-white/8 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-900/30 transition-colors ${collapsed ? "justify-center" : ""}`}>
           <div className="w-9 h-9 bg-gradient-to-br from-violet-500 to-indigo-600 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg shadow-violet-500/25">
             <Bot className="w-5 h-5 text-white" />

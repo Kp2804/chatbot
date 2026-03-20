@@ -67,8 +67,9 @@ const router = createBrowserRouter([
     path: "/app",
     Component: Layout,
     children: [
-      { index: true, Component: ChatbotSelectionPage },
-      { path: "chat", element: <Navigate to="/app" replace /> },
+      { index: true, element: <Navigate to="/app/workflows" replace /> },
+      { path: "chatbots", Component: ChatbotSelectionPage },
+      { path: "chat", element: <Navigate to="/app/chatbots" replace /> },
       { path: "chat/:chatbotId", Component: ChatInterface },
       {
         path: "chat/:chatbotId/manage",
