@@ -129,4 +129,6 @@ The widget loads `chatbot-widget.js` and accepts a `data-chatbot-id` attribute.
 
 - The in-memory rate limiter resets on restart and does not scale across multiple instances. Replace it with a Redis or Supabase-backed counter before deploying at scale.
 - Set `VITE_BACKEND_URL` to your deployed backend URL when building for production.
+- Set `VITE_ADMIN_EMAILS` (comma-separated) so only your platform admins can access admin-only pages.
+- Users not in `VITE_ADMIN_EMAILS` are treated as customers and get a restricted workspace view.
 - Run `npm run build` from the `frontend/` directory to produce a static build.

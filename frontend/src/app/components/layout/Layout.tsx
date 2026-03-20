@@ -19,8 +19,11 @@ import {
   ChevronDown,
   BookOpen,
   CreditCard,
+  Shield,
+  Users,
 } from "lucide-react";
 import { supabase } from "../../../lib/supabase";
+import { useUserRole } from "../../hooks/useUserRole";
 
 type AppNotification = {
   id: string;
@@ -74,7 +77,6 @@ const KnowledgeBaseNavItem = ({ collapsed, chatbotId }: { collapsed: boolean; ch
 
 export function Layout() {
   const [collapsed, setCollapsed] = useState(false);
-  const [user, setUser] = useState<any>(null);
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -83,6 +85,7 @@ export function Layout() {
   const notifRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const location = useLocation();
+  const { user, role, loading: roleLoading, isAdmin, isSuperAdmin } = useUserRole();
   const activeChatbotId = localStorage.getItem("activeChatbotId");
   const chatNavPath = activeChatbotId ? `/app/chat/${activeChatbotId}` : "/app";
   const isSelectionScreen = location.pathname === "/app";
@@ -164,38 +167,10 @@ export function Layout() {
   };
 
   useEffect(() => {
-    const checkUser = async () => {
-      try {
-        const timeout = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("Timeout")), 5000)
-        );
-        const sessionPromise = supabase.auth.getSession();
-
-        const result: any = await Promise.race([sessionPromise, timeout]);
-        const session = result?.data?.session;
-
-        if (!session) {
-          navigate("/auth");
-        } else {
-          setUser(session.user);
-        }
-      } catch (err) {
-        console.error("Session check failed or timed out", err);
-        navigate("/auth"); // Fallback to auth page if network is down
-      }
-    };
-    checkUser();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!session) {
-        navigate("/auth");
-      } else {
-        setUser(session.user);
-      }
-    });
-
-    return () => subscription.unsubscribe();
-  }, [navigate]);
+    if (!roleLoading && !user) {
+      navigate("/auth");
+    }
+  }, [navigate, roleLoading, user]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -257,6 +232,14 @@ export function Layout() {
     await supabase.auth.signOut();
     navigate("/auth");
   };
+
+  if (roleLoading) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-white dark:bg-[#0f0f13] text-gray-600 dark:text-gray-300">
+        Loading workspace...
+      </div>
+    );
+  }
 
   if (isSelectionScreen) {
     return (
@@ -341,44 +324,84 @@ export function Layout() {
           {/* Knowledge Base — chatbot-scoped */}
           <KnowledgeBaseNavItem collapsed={collapsed} chatbotId={activeChatbotId} />
 
-          {!collapsed && (
+          {isAdmin && !collapsed && (
             <p className="text-gray-600 dark:text-gray-600 px-3 mb-2 mt-5" style={{ fontSize: "0.65rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em" }}>
               Analytics
             </p>
           )}
-          {collapsed && <div className="my-2 border-t border-gray-300 dark:border-white/8 mx-2" />}
-          <NavLink
-            to="/app/analytics"
-            className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all ${isActive
-                ? "bg-violet-500/15 text-violet-400 border border-violet-500/20"
-                : "text-gray-500 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-200 dark:hover:bg-white/5"
-              } ${collapsed ? "justify-center" : ""}`
-            }
-          >
-            {({ isActive }) => (
-              <>
-                <BarChart2 className={`w-[18px] h-[18px] flex-shrink-0 ${isActive ? "text-violet-400" : ""}`} />
-                {!collapsed && <span style={{ fontSize: "0.875rem", fontWeight: isActive ? 600 : 400 }}>Analysis</span>}
-              </>
-            )}
-          </NavLink>
-          <NavLink
-            to="/app/settings"
-            className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all ${isActive
-                ? "bg-violet-500/15 text-violet-400 border border-violet-500/20"
-                : "text-gray-500 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-200 dark:hover:bg-white/5"
-              } ${collapsed ? "justify-center" : ""}`
-            }
-          >
-            {({ isActive }) => (
-              <>
-                <Settings className={`w-[18px] h-[18px] flex-shrink-0 ${isActive ? "text-violet-400" : ""}`} />
-                {!collapsed && <span style={{ fontSize: "0.875rem", fontWeight: isActive ? 600 : 400 }}>Settings</span>}
-              </>
-            )}
-          </NavLink>
+          {isAdmin && collapsed && <div className="my-2 border-t border-gray-300 dark:border-white/8 mx-2" />}
+          {isAdmin && (
+            <NavLink
+              to="/app/analytics"
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all ${isActive
+                  ? "bg-violet-500/15 text-violet-400 border border-violet-500/20"
+                  : "text-gray-500 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-200 dark:hover:bg-white/5"
+                } ${collapsed ? "justify-center" : ""}`
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <BarChart2 className={`w-[18px] h-[18px] flex-shrink-0 ${isActive ? "text-violet-400" : ""}`} />
+                  {!collapsed && <span style={{ fontSize: "0.875rem", fontWeight: isActive ? 600 : 400 }}>Analysis</span>}
+                </>
+              )}
+            </NavLink>
+          )}
+          {isAdmin && (
+            <NavLink
+              to="/app/settings"
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all ${isActive
+                  ? "bg-violet-500/15 text-violet-400 border border-violet-500/20"
+                  : "text-gray-500 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-200 dark:hover:bg-white/5"
+                } ${collapsed ? "justify-center" : ""}`
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <Settings className={`w-[18px] h-[18px] flex-shrink-0 ${isActive ? "text-violet-400" : ""}`} />
+                  {!collapsed && <span style={{ fontSize: "0.875rem", fontWeight: isActive ? 600 : 400 }}>Settings</span>}
+                </>
+              )}
+            </NavLink>
+          )}
+          {isAdmin && (
+            <NavLink
+              to="/app/admin/chatbots"
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all ${isActive
+                  ? "bg-violet-500/15 text-violet-400 border border-violet-500/20"
+                  : "text-gray-500 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-200 dark:hover:bg-white/5"
+                } ${collapsed ? "justify-center" : ""}`
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <Shield className={`w-[18px] h-[18px] flex-shrink-0 ${isActive ? "text-violet-400" : ""}`} />
+                  {!collapsed && <span style={{ fontSize: "0.875rem", fontWeight: isActive ? 600 : 400 }}>Admin Chatbots</span>}
+                </>
+              )}
+            </NavLink>
+          )}
+          {isSuperAdmin && (
+            <NavLink
+              to="/app/admin/users"
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all ${isActive
+                  ? "bg-violet-500/15 text-violet-400 border border-violet-500/20"
+                  : "text-gray-500 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-200 dark:hover:bg-white/5"
+                } ${collapsed ? "justify-center" : ""}`
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <Users className={`w-[18px] h-[18px] flex-shrink-0 ${isActive ? "text-violet-400" : ""}`} />
+                  {!collapsed && <span style={{ fontSize: "0.875rem", fontWeight: isActive ? 600 : 400 }}>Users</span>}
+                </>
+              )}
+            </NavLink>
+          )}
           <NavLink
             to="/app/pricing"
             className={({ isActive }) =>
@@ -407,6 +430,7 @@ export function Layout() {
               <div className="flex-1 min-w-0">
                 <div className="text-black dark:text-white truncate" style={{ fontSize: "0.8rem", fontWeight: 600 }}>{user?.user_metadata?.full_name || 'User'}</div>
                 <div className="text-gray-600 dark:text-gray-500 truncate" style={{ fontSize: "0.7rem" }}>{user?.email}</div>
+                <div className="text-emerald-700 dark:text-emerald-300 uppercase tracking-wide" style={{ fontSize: "0.62rem" }}>{role || 'customer'}</div>
               </div>
             )}
             {!collapsed && (
@@ -534,17 +558,19 @@ export function Layout() {
                       <User className="w-4 h-4" />
                       <span>Profile</span>
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        navigate("/app/settings");
-                        setShowUserMenu(false);
-                      }}
-                      className="w-full flex items-center gap-2 px-4 py-2 text-gray-700 dark:text-gray-300 hover:text-black dark:hover:text-white hover:bg-gray-200 dark:hover:bg-white/5 transition-all text-sm"
-                    >
-                      <Settings className="w-4 h-4" />
-                      <span>Settings</span>
-                    </button>
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigate("/app/settings");
+                          setShowUserMenu(false);
+                        }}
+                        className="w-full flex items-center gap-2 px-4 py-2 text-gray-700 dark:text-gray-300 hover:text-black dark:hover:text-white hover:bg-gray-200 dark:hover:bg-white/5 transition-all text-sm"
+                      >
+                        <Settings className="w-4 h-4" />
+                        <span>Settings</span>
+                      </button>
+                    )}
                   </div>
 
                   <div className="border-t border-gray-300 dark:border-white/8 py-1">

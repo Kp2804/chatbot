@@ -29,7 +29,6 @@ interface ChatbotLimitsResponse {
     currentPeriodEnd: string | null;
     messageLimit: number | null;
     botLimit: number | null;
-    storageLimit: number | null;
   };
   usage: {
     messagesUsed: number;
@@ -47,6 +46,9 @@ interface ChatbotLimitsResponse {
     activeChatbots: boolean;
   };
 }
+
+const MAX_PDF_UPLOADS = 5;
+const MAX_PDF_BYTES = 5 * 1024 * 1024;
 
 export function ChatbotManagePage() {
   const navigate = useNavigate();
@@ -66,6 +68,7 @@ export function ChatbotManagePage() {
   const [uploadMessage, setUploadMessage] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+  const pdfLimitReached = kbSources.length >= MAX_PDF_UPLOADS;
 
   useEffect(() => {
     if (window.self !== window.top) {
@@ -164,7 +167,12 @@ export function ChatbotManagePage() {
 
   const handlePDFUpload = async (file: File) => {
     if (!chatbotId) return;
-    if (file.size > 5 * 1024 * 1024) {
+    if (kbSources.length >= MAX_PDF_UPLOADS) {
+      setUploadStatus('error');
+      setUploadMessage(`PDF limit reached (${MAX_PDF_UPLOADS}/${MAX_PDF_UPLOADS}). Delete one to upload another.`);
+      return;
+    }
+    if (file.size > MAX_PDF_BYTES) {
       setUploadStatus('error');
       setUploadMessage('File exceeds 5 MB limit.');
       return;
@@ -347,14 +355,6 @@ export function ChatbotManagePage() {
                   Remaining: {limits.remaining.activeChatbots ?? 'Unlimited'}
                 </p>
               </div>
-
-              <div className="bg-white/[0.03] border border-white/10 rounded-xl p-3">
-                <p className="text-gray-400 text-xs">Storage Limit</p>
-                <p className="text-white text-sm mt-1">
-                  {limits.plan.storageLimit ?? 'Unlimited'}
-                </p>
-                <p className="text-gray-500 text-xs mt-1">Plan-level storage cap</p>
-              </div>
             </div>
           ) : (
             <p className="text-gray-500 text-sm">No usage data available yet.</p>
@@ -370,11 +370,15 @@ export function ChatbotManagePage() {
 
           {/* Upload zone */}
           <div
-            className="border-2 border-dashed border-white/10 hover:border-violet-500/50 rounded-2xl p-8 flex flex-col items-center justify-center gap-3 cursor-pointer transition-all group"
-            onClick={() => fileInputRef.current?.click()}
+            className={`border-2 border-dashed border-white/10 rounded-2xl p-8 flex flex-col items-center justify-center gap-3 transition-all group ${pdfLimitReached ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer hover:border-violet-500/50'}`}
+            onClick={() => {
+              if (pdfLimitReached) return;
+              fileInputRef.current?.click();
+            }}
             onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => {
               e.preventDefault();
+              if (pdfLimitReached) return;
               const file = e.dataTransfer.files[0];
               if (file) handlePDFUpload(file);
             }}
@@ -385,6 +389,7 @@ export function ChatbotManagePage() {
               accept=".pdf"
               className="hidden"
               onChange={(e) => {
+                if (pdfLimitReached) return;
                 const file = e.target.files?.[0];
                 if (file) handlePDFUpload(file);
               }}
@@ -397,9 +402,16 @@ export function ChatbotManagePage() {
             </div>
             <div className="text-center">
               <p className="text-white text-sm font-semibold">
-                {uploadStatus === 'uploading' ? 'Processing…' : 'Drop a PDF here or click to upload'}
+                {uploadStatus === 'uploading'
+                  ? 'Processing…'
+                  : pdfLimitReached
+                    ? `Upload limit reached (${MAX_PDF_UPLOADS} PDFs)`
+                    : 'Drop a PDF here or click to upload'}
               </p>
-              <p className="text-gray-500 text-xs mt-0.5">Max 5 MB · PDF only</p>
+              <p className="text-gray-500 text-xs mt-0.5">Max 5 MB · PDF only · {kbSources.length}/{MAX_PDF_UPLOADS} used</p>
+              {pdfLimitReached && (
+                <p className="text-amber-300 text-xs mt-1">Delete one existing PDF to upload another.</p>
+              )}
             </div>
 
             {/* Status feedback */}

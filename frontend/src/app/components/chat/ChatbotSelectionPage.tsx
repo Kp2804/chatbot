@@ -4,6 +4,7 @@ import { Bot, Plus, ArrowRight, RefreshCw } from "lucide-react";
 import { getAccessToken, supabase } from "../../../lib/supabase";
 import { toast } from "sonner";
 import { EmptyState, ErrorState, MetricCardSkeleton } from "../ui/feedback";
+import { useUserRole } from "../../hooks/useUserRole";
 
 interface Chatbot {
   id: string;
@@ -16,6 +17,7 @@ interface Chatbot {
 
 export function ChatbotSelectionPage() {
   const navigate = useNavigate();
+  const { isAdmin } = useUserRole();
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -184,20 +186,22 @@ export function ChatbotSelectionPage() {
                   {bot.description?.trim() || "No description configured"}
                 </p>
 
-                <div className="mt-4">
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      localStorage.setItem("activeChatbotId", bot.id);
-                      navigate(`/app/chat/${bot.id}/manage`);
-                    }}
-                    className="px-3 py-1.5 bg-emerald-100 hover:bg-emerald-200 border border-emerald-300 text-emerald-800 dark:bg-purple-500/15 dark:hover:bg-purple-500/25 dark:border-purple-500/35 dark:text-purple-200 dark:hover:text-purple-100 rounded-lg transition-colors"
-                    style={{ fontSize: "0.72rem", fontWeight: 600 }}
-                  >
-                    Manage
-                  </button>
-                </div>
+                {isAdmin && (
+                  <div className="mt-4">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        localStorage.setItem("activeChatbotId", bot.id);
+                        navigate(`/app/chat/${bot.id}/manage`);
+                      }}
+                      className="px-3 py-1.5 bg-emerald-100 hover:bg-emerald-200 border border-emerald-300 text-emerald-800 dark:bg-purple-500/15 dark:hover:bg-purple-500/25 dark:border-purple-500/35 dark:text-purple-200 dark:hover:text-purple-100 rounded-lg transition-colors"
+                      style={{ fontSize: "0.72rem", fontWeight: 600 }}
+                    >
+                      Manage
+                    </button>
+                  </div>
+                )}
               </button>
             ))}
           </div>

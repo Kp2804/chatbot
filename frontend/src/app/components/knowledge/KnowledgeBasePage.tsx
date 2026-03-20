@@ -110,6 +110,9 @@ const STAGES = [
   "indexing complete",
 ];
 
+const MAX_PDF_UPLOADS = 5;
+const MAX_PDF_BYTES = 5 * 1024 * 1024;
+
 const scopeOptions: Array<{ value: WebsiteScope; label: string; desc: string }> = [
   { value: "single_page", label: "Single page", desc: "Only this URL" },
   { value: "linked_pages", label: "This page + linked", desc: "Follow links up to depth" },
@@ -417,7 +420,12 @@ export function KnowledgeBasePage() {
 
   const handlePDFUpload = async (file: File) => {
     if (!chatbotId) return;
-    if (file.size > 5 * 1024 * 1024) {
+    if (pdfSources.length >= MAX_PDF_UPLOADS) {
+      setUploadStatus("error");
+      setUploadMessage(`PDF limit reached (${MAX_PDF_UPLOADS}/${MAX_PDF_UPLOADS}). Delete one to upload another.`);
+      return;
+    }
+    if (file.size > MAX_PDF_BYTES) {
       setUploadStatus("error");
       setUploadMessage("File exceeds 5 MB limit.");
       return;
@@ -478,6 +486,7 @@ export function KnowledgeBasePage() {
 
   const websiteSources = sources.filter((s) => s.source_type === "website");
   const pdfSources = sources.filter((s) => s.source_type === "pdf");
+  const pdfUploadLimitReached = pdfSources.length >= MAX_PDF_UPLOADS;
   const websiteLock = useMemo(() => {
     const normalizeHost = (raw?: string | null) => {
       if (!raw) return null;
@@ -948,11 +957,15 @@ export function KnowledgeBasePage() {
               </div>
 
               <div
-                className="border-2 border-dashed border-gray-200 dark:border-white/10 hover:border-violet-500/50 rounded-2xl p-8 flex flex-col items-center justify-center gap-3 cursor-pointer transition-all group"
-                onClick={() => fileInputRef.current?.click()}
+                className={`border-2 border-dashed border-gray-200 dark:border-white/10 rounded-2xl p-8 flex flex-col items-center justify-center gap-3 transition-all group ${pdfUploadLimitReached ? "opacity-70 cursor-not-allowed" : "hover:border-violet-500/50 cursor-pointer"}`}
+                onClick={() => {
+                  if (pdfUploadLimitReached) return;
+                  fileInputRef.current?.click();
+                }}
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={(e) => {
                   e.preventDefault();
+                  if (pdfUploadLimitReached) return;
                   const file = e.dataTransfer.files[0];
                   if (file) handlePDFUpload(file);
                 }}
@@ -963,6 +976,7 @@ export function KnowledgeBasePage() {
                   accept=".pdf"
                   className="hidden"
                   onChange={(e) => {
+                    if (pdfUploadLimitReached) return;
                     const file = e.target.files?.[0];
                     if (file) handlePDFUpload(file);
                   }}
@@ -975,9 +989,20 @@ export function KnowledgeBasePage() {
                 </div>
                 <div className="text-center">
                   <p className="text-gray-900 dark:text-white text-sm font-semibold">
-                    {uploadStatus === "uploading" ? "Processing…" : "Drop a PDF here or click to upload"}
+                    {uploadStatus === "uploading"
+                      ? "Processing…"
+                      : pdfUploadLimitReached
+                        ? `Upload limit reached (${MAX_PDF_UPLOADS} PDFs)`
+                        : "Drop a PDF here or click to upload"}
                   </p>
-                  <p className="text-gray-600 dark:text-gray-500 text-xs mt-0.5">Max 5 MB · PDF only</p>
+                  <p className="text-gray-600 dark:text-gray-500 text-xs mt-0.5">
+                    Max 5 MB · PDF only · {pdfSources.length}/{MAX_PDF_UPLOADS} used
+                  </p>
+                  {pdfUploadLimitReached && (
+                    <p className="text-amber-600 dark:text-amber-300 text-xs mt-1">
+                      Delete one existing PDF to upload another.
+                    </p>
+                  )}
                 </div>
 
                 {uploadStatus !== "idle" && uploadStatus !== "uploading" && (

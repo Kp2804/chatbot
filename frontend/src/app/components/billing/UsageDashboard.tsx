@@ -8,11 +8,11 @@ type UsageData = {
   messageLimit: number | null;
   botsUsed: number;
   botLimit: number | null;
-  storageUsedMb: number;
-  storageLimitMb: number | null;
 };
 
 const ACTIVE_STATUSES = new Set(["active", "past_due", "trialing"]);
+const DEFAULT_NO_PLAN_MESSAGE_LIMIT = 1000;
+const DEFAULT_NO_PLAN_BOT_LIMIT = 1;
 
 function toNumber(value: unknown, fallback = 0) {
   const parsed = Number(value);
@@ -22,11 +22,6 @@ function toNumber(value: unknown, fallback = 0) {
 function toPercent(used: number, limit: number | null) {
   if (limit == null || limit <= 0) return 0;
   return Math.max(0, Math.min(100, Math.round((used / limit) * 100)));
-}
-
-function formatStorage(mb: number) {
-  if (mb >= 1024) return `${(mb / 1024).toFixed(2)} GB`;
-  return `${mb.toFixed(2)} MB`;
 }
 
 function UsageProgressCard({
@@ -104,14 +99,12 @@ export function UsageDashboard() {
       const selectedSubscription = subscriptions.find((row) => ACTIVE_STATUSES.has(row.status)) || subscriptions[0] || null;
 
       let planName = "Starter";
-      let messageLimit: number | null = null;
-      let botLimit: number | null = null;
-      let storageLimitMb: number | null = null;
-
+      let messageLimit: number | null = DEFAULT_NO_PLAN_MESSAGE_LIMIT;
+      let botLimit: number | null = DEFAULT_NO_PLAN_BOT_LIMIT;
       if (selectedSubscription?.plan_id) {
         const { data: planData, error: planError } = await supabase
           .from("plans")
-          .select("name,message_limit,bot_limit,storage_limit")
+          .select("name,message_limit,bot_limit")
           .eq("id", selectedSubscription.plan_id)
           .maybeSingle();
 
@@ -121,7 +114,6 @@ export function UsageDashboard() {
           planName = typeof planData.name === "string" ? planData.name : planName;
           messageLimit = planData.message_limit == null ? null : toNumber(planData.message_limit);
           botLimit = planData.bot_limit == null ? null : toNumber(planData.bot_limit);
-          storageLimitMb = planData.storage_limit == null ? null : toNumber(planData.storage_limit);
         }
       }
 
@@ -131,8 +123,6 @@ export function UsageDashboard() {
         messageLimit,
         botsUsed: toNumber(botCountResult.count, 0),
         botLimit,
-        storageUsedMb: toNumber(usageResult.data?.storage_used, 0),
-        storageLimitMb,
       });
     } catch (err: any) {
       setError(err?.message || "Failed to load usage details");
@@ -208,7 +198,6 @@ export function UsageDashboard() {
     return {
       messagePercent: toPercent(usage.messagesUsed, usage.messageLimit),
       botPercent: toPercent(usage.botsUsed, usage.botLimit),
-      storagePercent: toPercent(usage.storageUsedMb, usage.storageLimitMb),
     };
   }, [usage]);
 
@@ -234,7 +223,7 @@ export function UsageDashboard() {
           No usage data available yet.
         </div>
       ) : (
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2">
           <UsageProgressCard
             label="Messages"
             value={`${usage.messagesUsed} / ${usage.messageLimit ?? "Unlimited"}`}
@@ -249,14 +238,6 @@ export function UsageDashboard() {
             subLabel={`${stats.botPercent}%`}
             percent={stats.botPercent}
             gradient="bg-gradient-to-r from-emerald-500 to-teal-500"
-          />
-
-          <UsageProgressCard
-            label="Storage"
-            value={`${formatStorage(usage.storageUsedMb)} / ${usage.storageLimitMb == null ? "Unlimited" : formatStorage(usage.storageLimitMb)}`}
-            subLabel={`${stats.storagePercent}%`}
-            percent={stats.storagePercent}
-            gradient="bg-gradient-to-r from-amber-500 to-orange-500"
           />
         </div>
       )}

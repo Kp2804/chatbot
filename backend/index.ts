@@ -17,7 +17,7 @@ import { createClient } from '@supabase/supabase-js';
 import { createRequire } from 'module';
 import crypto from 'crypto';
 import { translateText } from './services/translation';
-import { incrementMessages } from './services/usage';
+import { incrementBots, incrementMessages } from './services/usage';
 const _require = createRequire(import.meta.url);
 
 // Direct import used to bypass pdf-parse ESM startup issue
@@ -72,10 +72,13 @@ const supabaseAdmin = (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_
   ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY)
   : null;
 
+const MAX_PDF_UPLOAD_SIZE_BYTES = 5 * 1024 * 1024;
+const MAX_PDF_SOURCES_PER_CHATBOT = 5;
+
 //   File Upload (PDF only)
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 },
+  limits: { fileSize: MAX_PDF_UPLOAD_SIZE_BYTES },
   fileFilter: (_req, file, cb) => {
     if (file.mimetype === 'application/pdf') {
       cb(null, true);
@@ -687,6 +690,41 @@ async function retrieveRelevantChunks(chatbotId: string, message: string, conver
 type PlanLimitResource = 'messages' | 'bots';
 
 const ACTIVE_SUBSCRIPTION_STATUSES = new Set(['active', 'past_due', 'trialing']);
+const DEFAULT_NO_PLAN_BOT_LIMIT = Math.max(0, getEnvInt('DEFAULT_NO_PLAN_BOT_LIMIT', 1));
+const DEFAULT_NO_PLAN_MESSAGE_LIMIT = Math.max(0, getEnvInt('DEFAULT_NO_PLAN_MESSAGE_LIMIT', 1000));
+
+const adminEmails = new Set(
+  ((process.env.ADMIN_EMAILS || process.env.VITE_ADMIN_EMAILS || ''))
+    .split(',')
+    .map((email) => email.trim().toLowerCase())
+    .filter(Boolean)
+);
+
+const superAdminEmails = new Set(
+  ((process.env.SUPERADMIN_EMAILS || process.env.VITE_SUPERADMIN_EMAILS || ''))
+    .split(',')
+    .map((email) => email.trim().toLowerCase())
+    .filter(Boolean)
+);
+
+type AppRole = 'superadmin' | 'admin' | 'customer';
+
+function resolveUserRole(user: any): AppRole {
+  const email = String(user?.email || '').toLowerCase();
+  const metadataRole = String(
+    user?.user_metadata?.app_role
+    || user?.user_metadata?.role
+    || user?.app_metadata?.app_role
+    || user?.app_metadata?.role
+    || ''
+  ).toLowerCase();
+
+  if (email && superAdminEmails.has(email)) return 'superadmin';
+  if (metadataRole === 'superadmin') return 'superadmin';
+  if (metadataRole === 'admin') return 'admin';
+  if (email && adminEmails.has(email)) return 'admin';
+  return 'customer';
+}
 
 interface UserPlanAndUsage {
   planName: string | null;
@@ -694,7 +732,6 @@ interface UserPlanAndUsage {
   currentPeriodEnd: string | null;
   messageLimit: number | null;
   botLimit: number | null;
-  storageLimit: number | null;
   messagesUsed: number;
   botsCreated: number;
 }
@@ -719,10 +756,13 @@ async function getUserPlanAndUsage(userId: string): Promise<UserPlanAndUsage> {
   const selectedPlan = Array.isArray(selectedPlanValue)
     ? (selectedPlanValue[0] || null)
     : (selectedPlanValue || null);
-  const planName = selectedPlan?.name == null ? null : String(selectedPlan.name);
-  const messageLimit = selectedPlan?.message_limit == null ? null : Number(selectedPlan.message_limit);
-  const botLimit = selectedPlan?.bot_limit == null ? null : Number(selectedPlan.bot_limit);
-  const storageLimit = selectedPlan?.storage_limit == null ? null : Number(selectedPlan.storage_limit);
+  const planName = selectedPlan?.name == null ? 'No Pack' : String(selectedPlan.name);
+  const messageLimit = selectedPlan?.message_limit == null
+    ? (selectedPlan ? null : DEFAULT_NO_PLAN_MESSAGE_LIMIT)
+    : Number(selectedPlan.message_limit);
+  const botLimit = selectedPlan?.bot_limit == null
+    ? (selectedPlan ? null : DEFAULT_NO_PLAN_BOT_LIMIT)
+    : Number(selectedPlan.bot_limit);
 
   const { data: usageRow, error: usageError } = await supabaseAdmin!
     .from('usage')
@@ -740,7 +780,6 @@ async function getUserPlanAndUsage(userId: string): Promise<UserPlanAndUsage> {
     currentPeriodEnd: selectedSubscription?.current_period_end || null,
     messageLimit,
     botLimit,
-    storageLimit,
     messagesUsed: Number(usageRow?.messages_used || 0),
     botsCreated: Number(usageRow?.bots_created || 0),
   };
@@ -793,10 +832,23 @@ function enforcePlanLimit(resource: PlanLimitResource) {
       const userId = await resolveUserIdForPlanLimit(req, res, resource);
       if (!userId) return;
 
-      const { messageLimit, botLimit, messagesUsed, botsCreated } = await getUserPlanAndUsage(userId);
+      const { messageLimit, botLimit, messagesUsed } = await getUserPlanAndUsage(userId);
 
       const exceededMessages = resource === 'messages' && messageLimit !== null && messagesUsed >= messageLimit;
-      const exceededBots = resource === 'bots' && botLimit !== null && botsCreated >= botLimit;
+      let exceededBots = false;
+
+      if (resource === 'bots' && botLimit !== null) {
+        const { count: activeChatbotCount, error: activeChatbotsError } = await supabaseAdmin!
+          .from('chatbots')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', userId);
+
+        if (activeChatbotsError) {
+          throw new Error(activeChatbotsError.message);
+        }
+
+        exceededBots = Number(activeChatbotCount || 0) >= botLimit;
+      }
 
       if (exceededMessages || exceededBots) {
         return res.status(403).json({ error: 'Usage limit exceeded' });
@@ -1126,7 +1178,7 @@ app.post('/api/chat', rateLimitMiddleware, enforcePlanLimit('messages'), async (
 
 // Extract and verify the Supabase JWT from the Authorization header.
 // Returns the authenticated user or throws with a 401 response.
-async function requireAuth(req: Request, res: Response): Promise<{ id: string } | null> {
+async function requireAuth(req: Request, res: Response): Promise<{ id: string; email: string; role: AppRole; isAdmin: boolean; isSuperAdmin: boolean } | null> {
   const authHeader = req.headers['authorization'];
   const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
   if (!token) {
@@ -1142,7 +1194,34 @@ async function requireAuth(req: Request, res: Response): Promise<{ id: string } 
     res.status(401).json({ error: 'Invalid or expired token' });
     return null;
   }
-  return data.user as { id: string };
+  const role = resolveUserRole(data.user);
+  return {
+    id: data.user.id,
+    email: data.user.email || '',
+    role,
+    isAdmin: role === 'admin' || role === 'superadmin',
+    isSuperAdmin: role === 'superadmin',
+  };
+}
+
+async function requireAdmin(req: Request, res: Response): Promise<{ id: string; email: string } | null> {
+  const user = await requireAuth(req, res);
+  if (!user) return null;
+  if (!user.isAdmin) {
+    res.status(403).json({ error: 'Admin access required' });
+    return null;
+  }
+  return { id: user.id, email: user.email || '' };
+}
+
+async function requireSuperAdmin(req: Request, res: Response): Promise<{ id: string; email: string } | null> {
+  const user = await requireAuth(req, res);
+  if (!user) return null;
+  if (!user.isSuperAdmin) {
+    res.status(403).json({ error: 'Superadmin access required' });
+    return null;
+  }
+  return { id: user.id, email: user.email || '' };
 }
 
 // Verify a user owns a given chatbot. Returns false and sends 403 if not.
@@ -1190,6 +1269,12 @@ app.post('/api/chatbots', enforcePlanLimit('bots'), async (req: Request, res: Re
 
     if (error) {
       throw new Error(error.message);
+    }
+
+    try {
+      await incrementBots(supabaseAdmin, authenticatedUserId);
+    } catch (usageError: any) {
+      console.warn('Usage tracking warning (bots_created):', usageError?.message || usageError);
     }
 
     res.status(201).json(data);
@@ -1246,7 +1331,6 @@ app.get('/api/chatbots/:chatbotId/limits', async (req: Request, res: Response) =
         currentPeriodEnd: planUsage.currentPeriodEnd,
         messageLimit: planUsage.messageLimit,
         botLimit: planUsage.botLimit,
-        storageLimit: planUsage.storageLimit,
       },
       usage: {
         messagesUsed: planUsage.messagesUsed,
@@ -1269,6 +1353,211 @@ app.get('/api/chatbots/:chatbotId/limits', async (req: Request, res: Response) =
   }
 });
 
+app.get('/api/admin/chatbots', async (req: Request, res: Response) => {
+  try {
+    if (!supabaseAdmin) {
+      return res.status(503).json({ error: 'Supabase not configured' });
+    }
+
+    const admin = await requireAdmin(req, res);
+    if (!admin) return;
+
+    const { data: chatbots, error: chatbotError } = await supabaseAdmin
+      .from('chatbots')
+      .select('id, name, description, user_id, created_at, updated_at')
+      .order('created_at', { ascending: false })
+      .limit(500);
+
+    if (chatbotError) {
+      throw new Error(chatbotError.message);
+    }
+
+    const userIds = Array.from(new Set((chatbots || []).map((row: any) => row.user_id).filter(Boolean)));
+
+    const userEmailMap = new Map<string, string>();
+    for (const userId of userIds) {
+      const { data: userData, error: userError } = await supabaseAdmin.auth.admin.getUserById(userId);
+      if (!userError && userData?.user?.email) {
+        userEmailMap.set(userId, userData.user.email);
+      }
+    }
+
+    const rows = (chatbots || []).map((row: any) => ({
+      ...row,
+      user_email: userEmailMap.get(row.user_id) || null,
+    }));
+
+    res.json({ rows });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to load admin chatbot list' });
+  }
+});
+
+app.delete('/api/admin/chatbots/:chatbotId', async (req: Request, res: Response) => {
+  try {
+    if (!supabaseAdmin) {
+      return res.status(503).json({ error: 'Supabase not configured' });
+    }
+
+    const admin = await requireAdmin(req, res);
+    if (!admin) return;
+
+    const chatbotId = Array.isArray(req.params.chatbotId) ? req.params.chatbotId[0] : req.params.chatbotId;
+    if (!chatbotId) {
+      return res.status(400).json({ error: 'chatbotId is required' });
+    }
+
+    const { error } = await supabaseAdmin
+      .from('chatbots')
+      .delete()
+      .eq('id', chatbotId);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    res.json({ success: true, chatbotId });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to delete chatbot' });
+  }
+});
+
+app.get('/api/admin/users', async (req: Request, res: Response) => {
+  try {
+    if (!supabaseAdmin) {
+      return res.status(503).json({ error: 'Supabase not configured' });
+    }
+
+    const superAdmin = await requireSuperAdmin(req, res);
+    if (!superAdmin) return;
+
+    const allUsers: any[] = [];
+    let page = 1;
+    const perPage = 200;
+
+    while (true) {
+      const { data, error } = await supabaseAdmin.auth.admin.listUsers({ page, perPage });
+      if (error) throw new Error(error.message);
+
+      const users = data?.users || [];
+      if (users.length === 0) break;
+
+      allUsers.push(...users);
+      if (users.length < perPage) break;
+      page += 1;
+    }
+
+    const { data: allChatbots, error: chatbotError } = await supabaseAdmin
+      .from('chatbots')
+      .select('user_id');
+
+    if (chatbotError) throw new Error(chatbotError.message);
+
+    const chatbotCountByUser = new Map<string, number>();
+    for (const row of allChatbots || []) {
+      const userId = String((row as any).user_id || '');
+      if (!userId) continue;
+      chatbotCountByUser.set(userId, (chatbotCountByUser.get(userId) || 0) + 1);
+    }
+
+    const rows = allUsers
+      .map((user) => {
+        const fullName = String(user.user_metadata?.full_name || '').trim();
+        const username = String(user.user_metadata?.username || user.user_metadata?.user_name || '').trim();
+        const email = String(user.email || '').trim();
+        const hasIdentity = Boolean(email || fullName || username);
+
+        return {
+          id: user.id,
+          name: fullName || username || (email ? email.split('@')[0] : 'User'),
+          email,
+          role: resolveUserRole(user),
+          chatbot_count: chatbotCountByUser.get(user.id) || 0,
+          has_identity: hasIdentity,
+        };
+      })
+      .filter((row) => row.has_identity);
+
+    res.json({ rows });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to load users' });
+  }
+});
+
+app.patch('/api/admin/users/:userId/role', async (req: Request, res: Response) => {
+  try {
+    if (!supabaseAdmin) {
+      return res.status(503).json({ error: 'Supabase not configured' });
+    }
+
+    const superAdmin = await requireSuperAdmin(req, res);
+    if (!superAdmin) return;
+
+    const userId = Array.isArray(req.params.userId) ? req.params.userId[0] : req.params.userId;
+    const requestedRole = String(req.body?.role || '').toLowerCase();
+
+    if (!userId) {
+      return res.status(400).json({ error: 'userId is required' });
+    }
+
+    if (requestedRole !== 'admin' && requestedRole !== 'customer') {
+      return res.status(400).json({ error: 'role must be admin or customer' });
+    }
+
+    const { data: targetUserData, error: targetUserError } = await supabaseAdmin.auth.admin.getUserById(userId);
+    if (targetUserError || !targetUserData?.user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const targetRole = resolveUserRole(targetUserData.user);
+    if (targetRole === 'superadmin') {
+      return res.status(403).json({ error: 'Cannot change superadmin role' });
+    }
+
+    const nextMetadata = {
+      ...(targetUserData.user.user_metadata || {}),
+      app_role: requestedRole,
+      role: requestedRole,
+    };
+
+    let updatedUserData: any = null;
+
+    const nextAppMetadata = {
+      ...(targetUserData.user.app_metadata || {}),
+      app_role: requestedRole,
+      role: requestedRole,
+    };
+
+    const { data: updateWithAppMetaData, error: updateWithAppMetaError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+      user_metadata: nextMetadata,
+      app_metadata: nextAppMetadata,
+    });
+
+    if (updateWithAppMetaError) {
+      // Fallback for projects where app_metadata update paths are restricted.
+      const { data: updateUserMetaOnlyData, error: updateUserMetaOnlyError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+        user_metadata: nextMetadata,
+      });
+
+      if (updateUserMetaOnlyError) {
+        throw new Error(`Failed to update role: ${updateUserMetaOnlyError.message}`);
+      }
+
+      updatedUserData = updateUserMetaOnlyData;
+    } else {
+      updatedUserData = updateWithAppMetaData;
+    }
+
+    res.json({
+      success: true,
+      userId,
+      role: resolveUserRole(updatedUserData.user),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to update user role' });
+  }
+});
+
 // ── Knowledge Base endpoints ─────────────────────────────────────────────────
 
 // Upload a PDF — persistent (chatbot owner) or session-only (widget user)
@@ -1283,6 +1572,9 @@ app.post('/api/knowledge/upload', upload.single('file'), async (req: Request, re
 
     if (!file) return res.status(400).json({ error: 'PDF file required' });
     if (!chatbotId) return res.status(400).json({ error: 'chatbotId is required' });
+    if (file.size > MAX_PDF_UPLOAD_SIZE_BYTES) {
+      return res.status(400).json({ error: 'File exceeds 5 MB limit' });
+    }
 
     const isSessionOnly = sessionOnly === 'true';
 
@@ -1293,6 +1585,22 @@ app.post('/api/knowledge/upload', upload.single('file'), async (req: Request, re
       if (!user) return;
       const owns = await requireChatbotOwner(user.id, chatbotId, res);
       if (!owns) return;
+
+      const { count: existingPdfCount, error: countError } = await supabaseAdmin
+        .from('chatbot_knowledge_sources')
+        .select('id', { count: 'exact', head: true })
+        .eq('chatbot_id', chatbotId)
+        .eq('source_type', 'pdf');
+
+      if (countError) {
+        return res.status(500).json({ error: 'Failed to validate PDF upload limit' });
+      }
+
+      if ((existingPdfCount || 0) >= MAX_PDF_SOURCES_PER_CHATBOT) {
+        return res.status(409).json({
+          error: `PDF upload limit reached. You can keep up to ${MAX_PDF_SOURCES_PER_CHATBOT} PDFs. Delete one to upload another.`
+        });
+      }
     }
 
     // Parse PDF text
