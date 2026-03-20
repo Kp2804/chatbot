@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router";
 import { MessageSquare, CheckCircle2, GitBranch, HelpCircle, RefreshCw } from "lucide-react";
 import { supabase } from "../../../lib/supabase";
+import { toast } from "sonner";
+import { EmptyState, ErrorState, MetricCardSkeleton } from "../ui/feedback";
 
 interface ConversationSummary {
   id: string;
@@ -8,6 +11,7 @@ interface ConversationSummary {
 }
 
 export function AnalyticsPage() {
+  const navigate = useNavigate();
   const PAGE_SIZE = 1000;
   const [loading, setLoading] = useState(true);
   const [totalChats, setTotalChats] = useState(0);
@@ -15,6 +19,7 @@ export function AnalyticsPage() {
   const [resolvedRate, setResolvedRate] = useState(0);
   const [workflowCount, setWorkflowCount] = useState(0);
   const [publishedFaqCount, setPublishedFaqCount] = useState(0);
+  const [errorMessage, setErrorMessage] = useState("");
 
   useEffect(() => {
     fetchAnalytics();
@@ -71,9 +76,10 @@ export function AnalyticsPage() {
     return resolvedIds;
   };
 
-  const fetchAnalytics = async () => {
+  const fetchAnalytics = async (showSuccessToast = false) => {
     try {
       setLoading(true);
+      setErrorMessage("");
 
       const [conversationIds, { count: workflowTotal, error: workflowsError }, { count: publishedFaqTotal, error: faqsError }] = await Promise.all([
         fetchAllConversationIds(),
@@ -93,12 +99,21 @@ export function AnalyticsPage() {
       setResolvedRate(total ? Math.round((resolved / total) * 100) : 0);
       setWorkflowCount(workflowTotal || 0);
       setPublishedFaqCount(publishedFaqTotal || 0);
+      if (showSuccessToast) {
+        toast.success("Analytics refreshed");
+      }
     } catch (error: any) {
       console.error("Analytics fetch failed:", error.message);
+      setErrorMessage(error?.message || "We could not load analytics right now.");
+      if (showSuccessToast) {
+        toast.error("Failed to refresh analytics");
+      }
     } finally {
       setLoading(false);
     }
   };
+
+  const hasNoData = !loading && !errorMessage && totalChats === 0 && workflowCount === 0 && publishedFaqCount === 0;
 
   return (
     <div className="h-full overflow-y-auto bg-gray-50 dark:bg-[#08080c]">
@@ -114,7 +129,7 @@ export function AnalyticsPage() {
           </div>
           <button
             type="button"
-            onClick={fetchAnalytics}
+            onClick={() => fetchAnalytics(true)}
             className="flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-white/5 hover:bg-gray-100 dark:hover:bg-white/10 border border-gray-200 dark:border-white/10 rounded-xl text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-white transition-all"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
@@ -122,6 +137,34 @@ export function AnalyticsPage() {
           </button>
         </div>
 
+        {errorMessage && (
+          <ErrorState
+            message="Unable to fetch analytics right now. Please retry in a few seconds."
+            onRetry={() => fetchAnalytics(true)}
+            className="mb-6"
+          />
+        )}
+
+        {loading && (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+            <MetricCardSkeleton />
+            <MetricCardSkeleton />
+            <MetricCardSkeleton />
+            <MetricCardSkeleton />
+          </div>
+        )}
+
+        {hasNoData && (
+          <EmptyState
+            title="No analytics data yet"
+            description="Start a chat, publish an FAQ, or build a workflow to see performance metrics here."
+            actionLabel="Open bots"
+            onAction={() => navigate("/app")}
+            className="mb-10"
+          />
+        )}
+
+        {!loading && !hasNoData && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
           <div className="bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/5 rounded-[1.8rem] p-6">
             <div className="w-10 h-10 rounded-xl bg-violet-500/10 text-violet-400 flex items-center justify-center mb-4">
@@ -156,12 +199,15 @@ export function AnalyticsPage() {
             <div className="text-gray-500 dark:text-gray-300 font-bold uppercase tracking-widest" style={{ fontSize: "0.62rem" }}>Published FAQs</div>
           </div>
         </div>
+        )}
 
+        {!loading && (
         <div className="bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/5 rounded-[2rem] p-8">
           <p className="text-gray-600 dark:text-gray-300" style={{ fontSize: "0.9rem" }}>
             Metrics are calculated from all-time Supabase data. "Resolved" is based on conversations that have at least one assistant response.
           </p>
         </div>
+        )}
       </div>
     </div>
   );

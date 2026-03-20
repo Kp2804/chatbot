@@ -9,6 +9,7 @@ import {
   verifySubscriptionPayment,
 } from "./billingApi";
 import { PricingCard, PricingCardSkeleton } from "./PricingCard";
+import { UsageDashboard } from "./UsageDashboard";
 
 declare global {
   interface Window {
@@ -196,6 +197,8 @@ export function PricingPage() {
             Plans are loaded from your database and checkout runs through Razorpay subscriptions.
           </p>
         </div>
+
+        <UsageDashboard />
 
         {error && (
           <div className="mb-6 rounded-xl border border-red-400/50 bg-red-500/10 px-4 py-3 text-red-700 dark:text-red-300 flex items-start gap-2">

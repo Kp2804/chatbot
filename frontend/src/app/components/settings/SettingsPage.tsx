@@ -2,6 +2,8 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
 import { Sun, Moon, User, CreditCard } from "lucide-react";
 import { supabase } from "../../../lib/supabase";
+import { toast } from "sonner";
+import { EmptyState, ErrorState, ListSkeleton, LoadingState } from "../ui/feedback";
 
 export function SettingsPage() {
   const navigate = useNavigate();
@@ -11,6 +13,7 @@ export function SettingsPage() {
   const [plans, setPlans] = useState<any[]>([]);
   const [subscription, setSubscription] = useState<any | null>(null);
   const [loadingBilling, setLoadingBilling] = useState(true);
+  const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
     const saved = localStorage.getItem("darkMode");
@@ -25,6 +28,7 @@ export function SettingsPage() {
     // load user's chatbots to offer "manage" links
     const fetch = async () => {
       try {
+        setLoadError("");
         setLoadingBots(true);
         setLoadingBilling(true);
         const { data: userData } = await supabase.auth.getUser();
@@ -59,6 +63,7 @@ export function SettingsPage() {
         setSubscription(subData?.[0] || null);
       } catch (e) {
         console.error("Failed to load chatbots", e);
+        setLoadError("We could not load your settings data. Please try again.");
       } finally {
         setLoadingBots(false);
         setLoadingBilling(false);
@@ -82,11 +87,21 @@ export function SettingsPage() {
     setIsDarkMode(next);
     localStorage.setItem("darkMode", JSON.stringify(next));
     applyTheme(next);
+    toast.success(next ? "Dark mode enabled" : "Light mode enabled");
   };
 
   return (
     <div className="p-6">
       <h1 className="text-2xl font-semibold mb-4">Settings</h1>
+
+      {loadError && (
+        <ErrorState
+          message={loadError}
+          onRetry={() => window.location.reload()}
+          className="mb-4 max-w-xl"
+        />
+      )}
+
       <div className="space-y-6 max-w-md">
         <div className="flex items-center justify-between">
           <span className="font-medium">Dark mode</span>
@@ -122,7 +137,7 @@ export function SettingsPage() {
             <CreditCard className="w-4 h-4" /> Billing & Plans
           </h2>
           {loadingBilling ? (
-            <p className="text-gray-500">Loading billing…</p>
+            <LoadingState label="Loading billing..." />
           ) : (
             <>
               <div className="mb-3 p-3 rounded-xl border border-gray-300 dark:border-white/10 bg-gray-100 dark:bg-white/5">
@@ -158,7 +173,11 @@ export function SettingsPage() {
                   ))}
                 </div>
               ) : (
-                <p className="text-gray-500">No plans found. Seed plans in Supabase first.</p>
+                <EmptyState
+                  title="No plans available"
+                  description="No billing plans were found. Seed plans in Supabase to manage subscriptions."
+                  className="p-4"
+                />
               )}
             </>
           )}
@@ -168,7 +187,7 @@ export function SettingsPage() {
         <div>
           <h2 className="text-lg font-medium mb-2">Your chatbots</h2>
           {loadingBots ? (
-            <p className="text-gray-500">Loading…</p>
+            <ListSkeleton rows={3} />
           ) : chatbots.length ? (
             <ul className="space-y-2">
               {chatbots.map((bot) => (
@@ -184,7 +203,13 @@ export function SettingsPage() {
               ))}
             </ul>
           ) : (
-            <p className="text-gray-500">You don&apos;t have any chatbots yet.</p>
+              <EmptyState
+                title="No bots yet"
+                description="Create your first chatbot to configure behavior, billing limits, and integrations."
+                actionLabel="Create chatbot"
+                onAction={() => navigate("/app")}
+                className="p-4"
+              />
           )}
         </div>
       </div>

@@ -20,6 +20,8 @@ interface Message {
   timestamp: string;
 }
 
+const HUMAN_HANDOFF_FALLBACK = "I'm not sure about that. Let me connect you to a human.";
+
 interface Conversation {
   id: string;
   chatbot_id: string;
@@ -944,7 +946,7 @@ export function ChatInterface({ embedded = false, userName = '' }: { embedded?: 
           const botMsg: any = {
             conversation_id: currentConvId,
             role: "assistant",
-            content: t('chat.technicalDifficulties'),
+            content: HUMAN_HANDOFF_FALLBACK,
           };
           const { data: savedBotMsg } = await supabase.from('messages').insert([botMsg]).select().single();
           if (savedBotMsg) {

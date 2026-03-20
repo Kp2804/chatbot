@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { Bot, Plus, ArrowRight, RefreshCw } from "lucide-react";
 import { getAccessToken, supabase } from "../../../lib/supabase";
+import { toast } from "sonner";
+import { EmptyState, ErrorState, MetricCardSkeleton } from "../ui/feedback";
 
 interface Chatbot {
   id: string;
@@ -20,6 +22,7 @@ export function ChatbotSelectionPage() {
   const [newChatbotName, setNewChatbotName] = useState("");
   const [chatbots, setChatbots] = useState<Chatbot[]>([]);
   const [createError, setCreateError] = useState("");
+  const [fetchError, setFetchError] = useState("");
   const backendUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:3001";
 
   useEffect(() => {
@@ -55,6 +58,7 @@ export function ChatbotSelectionPage() {
   const fetchChatbots = async () => {
     try {
       setLoading(true);
+      setFetchError("");
       const { data: userData } = await supabase.auth.getUser();
       const currentUser = userData.user;
       if (!currentUser) {
@@ -71,15 +75,10 @@ export function ChatbotSelectionPage() {
       if (error) throw error;
 
       const list = data || [];
-      if (list.length === 0) {
-        const created = await createChatbotViaBackend("My Chatbot", "Default chatbot");
-        setChatbots([created]);
-        return;
-      }
-
       setChatbots(list);
     } catch (error: any) {
       console.error("Error fetching chatbots:", error.message);
+      setFetchError(error?.message || "We could not load your bots right now.");
     } finally {
       setLoading(false);
     }
@@ -101,13 +100,20 @@ export function ChatbotSelectionPage() {
       setChatbots((prev) => [...prev, data]);
       setNewChatbotName("");
       setShowCreateModal(false);
+      toast.success("Chatbot created successfully");
     } catch (error: any) {
       const message = error?.message || "Error creating chatbot";
       setCreateError(message);
       console.error("Error creating chatbot:", message);
+      toast.error("Could not create chatbot");
     } finally {
       setCreating(false);
     }
+  };
+
+  const openCreateModal = () => {
+    setNewChatbotName(`Chatbot ${chatbots.length + 1}`);
+    setShowCreateModal(true);
   };
 
   const handleSelectChatbot = (chatbotId: string) => {
@@ -129,10 +135,7 @@ export function ChatbotSelectionPage() {
           </div>
           <button
             type="button"
-            onClick={() => {
-              setNewChatbotName(`Chatbot ${chatbots.length + 1}`);
-              setShowCreateModal(true);
-            }}
+            onClick={openCreateModal}
             className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 dark:from-violet-600 dark:to-indigo-700 dark:hover:from-violet-700 dark:hover:to-indigo-800 text-white rounded-2xl transition-all shadow-lg shadow-emerald-600/25 dark:shadow-violet-600/25"
             style={{ fontSize: "0.85rem", fontWeight: 700 }}
           >
@@ -141,9 +144,26 @@ export function ChatbotSelectionPage() {
         </div>
 
         {loading ? (
-          <div className="h-72 flex items-center justify-center text-emerald-700 dark:text-purple-300/70">
-            <RefreshCw className="w-6 h-6 animate-spin" />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <MetricCardSkeleton />
+            <MetricCardSkeleton />
+            <MetricCardSkeleton />
+            <MetricCardSkeleton />
           </div>
+        ) : fetchError ? (
+          <ErrorState
+            message="We were unable to load your chatbots. Please check your connection and retry."
+            onRetry={fetchChatbots}
+            className="max-w-xl"
+          />
+        ) : chatbots.length === 0 ? (
+          <EmptyState
+            title="No bots yet"
+            description="Create your first chatbot to start handling conversations and knowledge workflows."
+            actionLabel="Create your first bot"
+            onAction={openCreateModal}
+            className="max-w-2xl mx-auto"
+          />
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {chatbots.map((bot) => (
@@ -216,7 +236,7 @@ export function ChatbotSelectionPage() {
 
                 {createError && (
                   <p className="text-red-600 dark:text-red-300" style={{ fontSize: "0.75rem" }}>
-                    {createError}
+                    {createError || "Please try a different name or retry in a moment."}
                   </p>
                 )}
 

@@ -15,6 +15,7 @@ import { ProfilePage } from "./components/profile/ProfilePage";
 import { SettingsPage } from "./components/settings/SettingsPage";
 import { KnowledgeBasePage } from "./components/knowledge/KnowledgeBasePage";
 import { PricingPage } from "./components/billing/PricingPage";
+import { Toaster } from "sonner";
 
 const router = createBrowserRouter([
   {
@@ -51,5 +52,17 @@ const router = createBrowserRouter([
 ]);
 
 export default function App() {
-  return <RouterProvider router={router} />;
+  return (
+    <>
+      <RouterProvider router={router} />
+      <Toaster
+        richColors
+        position="top-right"
+        theme="system"
+        toastOptions={{
+          className: "border border-gray-300 dark:border-white/10",
+        }}
+      />
+    </>
+  );
 }

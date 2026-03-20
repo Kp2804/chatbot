@@ -60,6 +60,7 @@ const RAG_FALLBACK_MIN_SIMILARITY = getEnvFloat('RAG_FALLBACK_MIN_SIMILARITY', 0
 const RAG_FALLBACK_MATCH_COUNT = getEnvInt('RAG_FALLBACK_MATCH_COUNT', RAG_MATCH_COUNT);
 const CHAT_HISTORY_LIMIT = getEnvInt('CHAT_HISTORY_LIMIT', 3);
 const AI_MAX_OUTPUT_TOKENS = getEnvInt('AI_MAX_OUTPUT_TOKENS', 512);
+const AI_MAX_RETRIES = getEnvInt('AI_MAX_RETRIES', 2);
 
 // Groq LLM client
 const groq = process.env.GROQ_API_KEY
@@ -104,6 +105,46 @@ async function embedText(text: string): Promise<number[]> {
 
 // Warm up embedding model
 getEmbeddingPipeline().catch(() => {});
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function runWithRetries<T>(fn: () => Promise<T>, label: string, retries = AI_MAX_RETRIES): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+      const message = (error as any)?.message || 'Unknown error';
+      const currentAttempt = attempt + 1;
+      const maxAttempts = retries + 1;
+
+      if (attempt >= retries) {
+        console.error(`${label} failed after ${maxAttempts} attempt(s): ${message}`);
+        break;
+      }
+
+      console.warn(`${label} failed on attempt ${currentAttempt}/${maxAttempts}: ${message}. Retrying...`);
+      await sleep(250 * currentAttempt);
+    }
+  }
+
+  throw lastError;
+}
+
+async function logErrorToDatabase(userId: string | null, message: string) {
+  if (!supabaseAdmin || !userId) return;
+
+  const { error } = await supabaseAdmin.from('logs').insert({
+    user_id: userId,
+    type: 'error',
+    message,
+  });
+
+  if (error) {
+    console.warn(`Failed to persist error log: ${error.message}`);
+  }
+}
 
 //   LLM Completion Wrapper
 async function createChatCompletion(messages: any[], ragContextFound: boolean) {
@@ -159,12 +200,12 @@ async function createChatCompletion(messages: any[], ragContextFound: boolean) {
 
   // Respect explicit ollama-only mode for local/dev usage.
   if (AI_PROVIDER === 'ollama-only') {
-    return runOllama();
+    return runWithRetries(runOllama, 'Ollama request');
   }
 
   // Default behavior: Groq first, then Ollama only if Groq fails.
   try {
-    return await runGroq();
+    return await runWithRetries(runGroq, 'Groq request');
   } catch (groqError: any) {
     const groqMessage = groqError?.message || 'Unknown Groq error';
 
@@ -173,7 +214,7 @@ async function createChatCompletion(messages: any[], ragContextFound: boolean) {
     }
 
     console.warn(`Groq request failed; falling back to Ollama. Reason: ${groqMessage}`);
-    return runOllama();
+    return runWithRetries(runOllama, 'Ollama fallback request');
   }
 }
 
@@ -1065,6 +1106,15 @@ app.post('/api/chat', rateLimitMiddleware, enforcePlanLimit('messages'), async (
 
   } catch (error: any) {
     console.error('Error calling AI provider:', error);
+
+    const requestUserId = typeof res.locals.planLimitUserId === 'string'
+      ? res.locals.planLimitUserId
+      : null;
+    await logErrorToDatabase(
+      requestUserId,
+      `AI chat error: ${error?.message || 'Unknown error'}`
+    );
+
     res.status(500).json({ 
       error: 'Failed to generate AI response',
       details: error.message 
@@ -1559,11 +1609,13 @@ app.post('/api/knowledge/website/index', async (req: Request, res: Response) => 
 });
 
 app.post('/api/knowledge/website/test', async (req: Request, res: Response) => {
+  let websiteTestUserId: string | null = null;
   try {
     if (!supabaseAdmin) return res.status(503).json({ error: 'Supabase not configured' });
 
     const user = await requireAuth(req, res);
     if (!user) return;
+    websiteTestUserId = user.id;
 
     const { chatbotId, question } = req.body || {};
     if (!chatbotId) return res.status(400).json({ error: 'chatbotId is required' });
@@ -1614,6 +1666,11 @@ app.post('/api/knowledge/website/test', async (req: Request, res: Response) => {
       citations
     });
   } catch (err: any) {
+    await logErrorToDatabase(
+      websiteTestUserId,
+      `Website knowledge test AI error: ${err?.message || 'Unknown error'}`
+    );
+
     res.status(500).json({ error: err.message || 'Test failed' });
   }
 });
