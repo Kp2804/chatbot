@@ -192,7 +192,7 @@ export function ChatbotSelectionPage() {
   };
 
   const openCreateModal = () => {
-    if (!hasActivePlan) {
+    if (!hasActivePlan && !isAdmin) {
       toast.error("Select an active plan to create a chatbot");
       return;
     }
@@ -200,6 +200,8 @@ export function ChatbotSelectionPage() {
     setNewChatbotName(`Chatbot ${chatbots.length + 1}`);
     setShowCreateModal(true);
   };
+
+  const canCreateChatbot = hasActivePlan || isAdmin;
 
   const handleSelectChatbot = (chatbotId: string) => {
     localStorage.setItem("activeChatbotId", chatbotId);
@@ -314,7 +316,7 @@ export function ChatbotSelectionPage() {
             <button
               type="button"
               onClick={openCreateModal}
-              disabled={!hasActivePlan}
+              disabled={!canCreateChatbot}
               className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 dark:from-violet-600 dark:to-indigo-700 dark:hover:from-violet-700 dark:hover:to-indigo-800 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-2xl transition-all shadow-lg shadow-emerald-600/25 dark:shadow-violet-600/25"
               style={{ fontSize: "0.85rem", fontWeight: 700 }}
             >
@@ -332,7 +334,7 @@ export function ChatbotSelectionPage() {
           </div>
         </div>
 
-        {!hasActivePlan && !loading && !fetchError && (
+        {!hasActivePlan && !isAdmin && !loading && !fetchError && (
           <div className="mb-6 rounded-2xl border border-amber-300/70 bg-amber-100/70 dark:border-amber-500/40 dark:bg-amber-500/10 px-4 py-3 flex items-center justify-between gap-3">
             <p className="text-amber-900 dark:text-amber-200" style={{ fontSize: "0.8rem", fontWeight: 600 }}>
               Select an active plan before creating a chatbot.

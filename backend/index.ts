@@ -920,11 +920,30 @@ async function resolveUserIdForPlanLimit(
   return chatbotRow.user_id;
 }
 
+async function shouldBypassPlanLimitsForUser(userId: string): Promise<boolean> {
+  if (!supabaseAdmin) return false;
+
+  const { data: userData, error: userError } = await supabaseAdmin.auth.admin.getUserById(userId);
+  if (userError || !userData?.user) {
+    return false;
+  }
+
+  const role = resolveUserRole(userData.user);
+  return role === 'admin' || role === 'superadmin';
+}
+
 function enforcePlanLimit(resource: PlanLimitResource) {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
       const userId = await resolveUserIdForPlanLimit(req, res, resource);
       if (!userId) return;
+
+      const bypassPlanLimits = await shouldBypassPlanLimitsForUser(userId);
+      if (bypassPlanLimits) {
+        res.locals.planLimitUserId = userId;
+        next();
+        return;
+      }
 
       const { subscriptionStatus, messageLimit, botLimit, messagesUsed } = await getUserPlanAndUsage(userId);
       const hasActiveSubscription = ACTIVE_SUBSCRIPTION_STATUSES.has(String(subscriptionStatus || '').toLowerCase());
