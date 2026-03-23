@@ -201,7 +201,8 @@ export function ChatbotSelectionPage() {
     setShowCreateModal(true);
   };
 
-  const canCreateChatbot = hasActivePlan || isAdmin;
+  const hasChatbotCreationAccess = hasActivePlan || isAdmin;
+  const canCreateChatbot = hasChatbotCreationAccess;
 
   const handleSelectChatbot = (chatbotId: string) => {
     localStorage.setItem("activeChatbotId", chatbotId);
@@ -368,12 +369,12 @@ export function ChatbotSelectionPage() {
         ) : chatbots.length === 0 ? (
           <EmptyState
             title="No bots yet"
-            description={hasActivePlan
+            description={hasChatbotCreationAccess
               ? "Create your first chatbot to start handling conversations and knowledge workflows."
               : "Choose a subscription plan to unlock chatbot creation and start handling conversations."
             }
-            actionLabel={hasActivePlan ? "Create your first bot" : "Choose a plan"}
-            onAction={hasActivePlan
+            actionLabel={hasChatbotCreationAccess ? "Create your first bot" : "Choose a plan"}
+            onAction={hasChatbotCreationAccess
               ? openCreateModal
               : () => document.getElementById("plan-selection")?.scrollIntoView({ behavior: "smooth", block: "start" })
             }
@@ -420,7 +421,7 @@ export function ChatbotSelectionPage() {
           </div>
         )}
 
-        {!hasActivePlan && (
+        {!hasActivePlan && !isAdmin && (
           <section id="plan-selection" className="mt-8 rounded-3xl border border-emerald-200 dark:border-purple-500/25 bg-white dark:bg-[#10101a] p-6 md:p-8">
             <h2 className="text-gray-900 dark:text-purple-100" style={{ fontSize: "1.5rem", fontWeight: 800 }}>
               Select a plan to unlock chatbot creation

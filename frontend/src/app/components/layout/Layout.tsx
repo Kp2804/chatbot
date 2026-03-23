@@ -373,7 +373,7 @@ export function Layout() {
               )}
             </NavLink>
           )}
-          {isAdmin && (
+          {isSuperAdmin && (
             <NavLink
               to="/app/admin/chatbots"
               className={({ isActive }) =>

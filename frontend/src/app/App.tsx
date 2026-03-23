@@ -112,7 +112,7 @@ const router = createBrowserRouter([
       {
         path: "admin/chatbots",
         element: (
-          <RoleProtectedRoute allow={["admin", "superadmin"]}>
+          <RoleProtectedRoute allow={["superadmin"]}>
             <AdminChatbotsPage />
           </RoleProtectedRoute>
         ),
