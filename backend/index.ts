@@ -517,6 +517,15 @@ async function assertPublicSafeUrl(rawUrl: string) {
   }
 }
 
+function formatCrawlerError(error: any) {
+  const message = error?.message || 'fetch failed';
+  const causeMessage = error?.cause?.message;
+  if (causeMessage && causeMessage !== message) {
+    return `${message} (${causeMessage})`;
+  }
+  return message;
+}
+
 function shouldIncludeUrl(rawUrl: string, rootUrl: URL, scope: WebsiteScope, rules: WebsiteCrawlRules) {
   const candidate = new URL(rawUrl);
   const sameHost = candidate.hostname === rootUrl.hostname;
@@ -587,21 +596,58 @@ function extractLinks(html: string, baseUrl: string) {
 }
 
 async function fetchHtmlPage(url: string) {
-  await assertPublicSafeUrl(url);
-  const response = await fetch(url, {
-    headers: {
-      'User-Agent': 'NexusChatbotIndexer/1.0 (+website indexing)'
-    }
-  });
-  if (!response.ok) throw new Error(`Failed to fetch (${response.status})`);
+  const browserLikeUserAgent =
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+  const userAgents = [
+    browserLikeUserAgent,
+    'NexusChatbotIndexer/1.0 (+website indexing)'
+  ];
 
-  const contentType = response.headers.get('content-type') || '';
-  if (!contentType.includes('text/html')) {
-    throw new Error('Unsupported content type');
+  const attemptUrls = [url];
+  if (url.startsWith('https://')) {
+    attemptUrls.push(`http://${url.slice('https://'.length)}`);
   }
 
-  const html = await response.text();
-  return { html, finalUrl: response.url || url };
+  const failures: string[] = [];
+
+  for (const candidateUrl of attemptUrls) {
+    await assertPublicSafeUrl(candidateUrl);
+
+    for (const userAgent of userAgents) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 15000);
+
+      try {
+        const response = await fetch(candidateUrl, {
+          method: 'GET',
+          redirect: 'follow',
+          signal: controller.signal,
+          headers: {
+            'User-Agent': userAgent,
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Cache-Control': 'no-cache'
+          }
+        });
+
+        if (!response.ok) throw new Error(`Failed to fetch (${response.status})`);
+
+        const contentType = response.headers.get('content-type') || '';
+        if (!contentType.includes('text/html')) {
+          throw new Error(`Unsupported content type: ${contentType || 'unknown'}`);
+        }
+
+        const html = await response.text();
+        return { html, finalUrl: response.url || candidateUrl };
+      } catch (error: any) {
+        failures.push(`${candidateUrl} via ${userAgent.includes('Mozilla') ? 'browser-ua' : 'indexer-ua'}: ${formatCrawlerError(error)}`);
+      } finally {
+        clearTimeout(timeout);
+      }
+    }
+  }
+
+  throw new Error(failures[0] || 'Failed to fetch page');
 }
 
 async function crawlWebsitePreview(input: WebsitePreviewRequest) {
@@ -688,7 +734,8 @@ async function crawlWebsitePreview(input: WebsitePreviewRequest) {
       }
     } catch (error: any) {
       failedPages += 1;
-      warnings.push({ type: 'failed', url: normalizedCurrent, message: error?.message || 'Failed to fetch page' });
+      const warningMessage = formatCrawlerError(error);
+      warnings.push({ type: 'failed', url: normalizedCurrent, message: warningMessage });
       pages.push({
         url: normalizedCurrent,
         normalizedUrl: normalizedCurrent,
@@ -697,7 +744,7 @@ async function crawlWebsitePreview(input: WebsitePreviewRequest) {
         contentSize: 0,
         depth: current.depth,
         status: 'failed',
-        warning: error?.message || 'Failed to fetch page'
+        warning: warningMessage
       });
     }
   }
@@ -2018,6 +2065,16 @@ app.post('/api/knowledge/website/index', async (req: Request, res: Response) => 
     const preview = await crawlWebsitePreview({ chatbotId, url, scope, rules: normalizedRules } as any);
     const selectedPages = preview.pages.filter((page) => page.status === 'ready');
     const failedPages = preview.pages.filter((page) => page.status === 'failed').length;
+
+    if (selectedPages.length === 0) {
+      const firstFailure = preview.warnings.find((warning) => warning.type === 'failed');
+      const failureReason = firstFailure?.message || 'No indexable pages were found for this website and crawl scope';
+      return res.status(422).json({
+        error: `Indexing could not continue: ${failureReason}`,
+        preview: preview.totals,
+        warnings: preview.warnings
+      });
+    }
 
     const existingByUrl = new Map<string, { id: string; content: string | null }>();
     for (const row of existingSources || []) {
