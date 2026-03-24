@@ -149,13 +149,14 @@ export function WorkflowInterface() {
   const previewSectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [billingLoaded, setBillingLoaded] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState<"all" | "active" | "paused" | "draft">("all");
   const [search, setSearch] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: "success" | "info" } | null>(null);
   const [previewModeByWorkflow, setPreviewModeByWorkflow] = useState<Record<string, "structure" | "visual">>({});
-  const [hasActivePlan, setHasActivePlan] = useState(false);;
+  const [hasActivePlan, setHasActivePlan] = useState(false);
 
   useEffect(() => {
     const loadBillingState = async () => {
@@ -170,6 +171,8 @@ export function WorkflowInterface() {
         }
       } catch (error) {
         console.error('Failed to load billing state:', error);
+      } finally {
+        setBillingLoaded(true);
       }
     };
     loadBillingState();
@@ -318,6 +321,26 @@ export function WorkflowInterface() {
   const setPreviewMode = (workflowId: string, mode: "structure" | "visual") => {
     setPreviewModeByWorkflow((prev) => ({ ...prev, [workflowId]: mode }));
   };
+
+  if (billingLoaded && !hasActivePlan) {
+    return (
+      <div className="h-full flex items-center justify-center bg-gray-50 dark:bg-[#08080c]">
+        <div className="max-w-md text-center">
+          <Lock className="w-16 h-16 mx-auto mb-6 text-emerald-600 dark:text-violet-600" />
+          <h2 className="text-gray-900 dark:text-white mb-2" style={{ fontSize: "1.5rem", fontWeight: 700 }}>Plan Required</h2>
+          <p className="text-gray-500 dark:text-gray-400 mb-8" style={{ fontSize: "0.95rem" }}>You need an active subscription to create and manage workflows. Choose a plan to get started.</p>
+          <button
+            type="button"
+            onClick={() => navigate("/app/pricing")}
+            className="px-8 py-3 bg-gradient-to-br from-emerald-600 to-teal-700 dark:from-violet-600 dark:to-indigo-800 hover:from-emerald-700 hover:to-teal-800 dark:hover:from-violet-500 dark:hover:to-indigo-700 text-white rounded-2xl transition-all font-bold shadow-lg"
+            style={{ fontSize: "1rem" }}
+          >
+            View Pricing Plans
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-full overflow-y-auto bg-gray-50 dark:bg-[#08080c]">

@@ -4,14 +4,16 @@ import { Sun, Moon, User, CreditCard } from "lucide-react";
 import { supabase } from "../../../lib/supabase";
 import { toast } from "sonner";
 import { EmptyState, ErrorState, ListSkeleton, LoadingState } from "../ui/feedback";
+import { fetchBillingState, type BillingPlan, type UserSubscription } from "../billing/billingApi";
+import { PricingCard } from "../billing/PricingCard";
 
 export function SettingsPage() {
   const navigate = useNavigate();
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [chatbots, setChatbots] = useState<any[]>([]);
   const [loadingBots, setLoadingBots] = useState(true);
-  const [plans, setPlans] = useState<any[]>([]);
-  const [subscription, setSubscription] = useState<any | null>(null);
+  const [plans, setPlans] = useState<BillingPlan[]>([]);
+  const [subscription, setSubscription] = useState<UserSubscription | null>(null);
   const [loadingBilling, setLoadingBilling] = useState(true);
   const [loadError, setLoadError] = useState("");
 
@@ -46,21 +48,9 @@ export function SettingsPage() {
         if (error) throw error;
         setChatbots(data || []);
 
-        const { data: plansData, error: plansError } = await supabase
-          .from("plans")
-          .select("id,name,price_monthly,message_limit,bot_limit,storage_limit")
-          .order("price_monthly", { ascending: true });
-        if (plansError) throw plansError;
-        setPlans(plansData || []);
-
-        const { data: subData, error: subError } = await supabase
-          .from("subscriptions")
-          .select("id,plan_id,status,current_period_end,created_at")
-          .eq("user_id", currentUser.id)
-          .order("created_at", { ascending: false })
-          .limit(1);
-        if (subError) throw subError;
-        setSubscription(subData?.[0] || null);
+        const billingState = await fetchBillingState(currentUser.id);
+        setPlans(billingState.plans);
+        setSubscription(billingState.subscription);
       } catch (e) {
         console.error("Failed to load chatbots", e);
         setLoadError("We could not load your settings data. Please try again.");
@@ -156,19 +146,18 @@ export function SettingsPage() {
               </button>
 
               {plans.length ? (
-                <div className="space-y-2">
+                <div className="space-y-4">
                   {plans.map((plan) => (
                     <div
                       key={plan.id}
-                      className="p-3 rounded-xl border border-gray-300 dark:border-white/10 bg-white dark:bg-[#1e1e2e]"
+                      className="max-w-md"
                     >
-                      <div className="flex items-center justify-between">
-                        <span className="font-medium text-black dark:text-white">{plan.name}</span>
-                        <span className="text-sm text-gray-700 dark:text-gray-300">${plan.price_monthly}/mo</span>
-                      </div>
-                      <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                        {plan.message_limit} msgs, {plan.bot_limit} bots, {plan.storage_limit} storage
-                      </div>
+                      <PricingCard
+                        plan={plan}
+                        isCurrentPlan={plan.id === subscription?.plan_id}
+                        isProcessing={false}
+                        onUpgrade={() => navigate("/app/pricing")}
+                      />
                     </div>
                   ))}
                 </div>

@@ -107,6 +107,7 @@ export function FAQManager() {
   const hasActiveChatbot = Boolean(activeChatbotId);
   const [faqList, setFaqList] = useState<FAQ[]>([]);
   const [loading, setLoading] = useState(true);
+  const [billingLoaded, setBillingLoaded] = useState(false);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "published" | "draft">("all");
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -128,6 +129,8 @@ export function FAQManager() {
         }
       } catch (error) {
         console.error('Failed to load billing state:', error);
+      } finally {
+        setBillingLoaded(true);
       }
     };
     loadBillingState();
@@ -331,6 +334,26 @@ export function FAQManager() {
   const publishedCount = faqList.filter((f) => f.status === "published").length;
   const draftCount = faqList.filter((f) => f.status === "draft").length;
   const totalViews = faqList.reduce((sum, f) => sum + f.views, 0);
+
+  if (billingLoaded && !hasActivePlan) {
+    return (
+      <div className="h-full flex items-center justify-center bg-gray-50 dark:bg-[#08080c]">
+        <div className="max-w-md text-center">
+          <Lock className="w-16 h-16 mx-auto mb-6 text-indigo-600 dark:text-violet-600" />
+          <h2 className="text-gray-900 dark:text-white mb-2" style={{ fontSize: "1.5rem", fontWeight: 700 }}>Plan Required</h2>
+          <p className="text-gray-500 dark:text-gray-400 mb-8" style={{ fontSize: "0.95rem" }}>You need an active subscription to create and manage FAQs. Choose a plan to get started.</p>
+          <button
+            type="button"
+            onClick={() => navigate("/app/pricing")}
+            className="px-8 py-3 bg-gradient-to-r from-violet-500 to-indigo-600 hover:from-violet-600 hover:to-indigo-700 text-white rounded-2xl transition-all font-bold shadow-lg"
+            style={{ fontSize: "1rem" }}
+          >
+            View Pricing Plans
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-full overflow-y-auto">
