@@ -56,14 +56,14 @@ Open `.env` and set:
 
 In the Supabase SQL editor, run the files in this order:
 
-1. `database/schemas/supabase_schema.sql` — core tables + RLS policies
-2. `database/schemas/supabase_multi_chatbot.sql` — multi-chatbot support
-3. `database/schemas/supabase_chatbot_features.sql` — workflows, FAQs, analytics
-4. `database/schemas/supabase_embed_read_policies.sql` — embedded widget read access
-5. `database/migrations/rag_tables.sql` — document chunks + vector search function
-6. `database/migrations/embed_public_access.sql` — secure public embed access policies
-7. `database/migrations/api_rate_limits.sql` — database-backed daily API rate limiting
-8. `database/migrations/multitenant_policy_hardening.sql` — strict cross-tenant ownership checks
+1. `backend/database/schemas/supabase_schema.sql` — core tables + RLS policies
+2. `backend/database/schemas/supabase_multi_chatbot.sql` — multi-chatbot support
+3. `backend/database/schemas/supabase_chatbot_features.sql` — workflows, FAQs, analytics
+4. `backend/database/schemas/supabase_embed_read_policies.sql` — embedded widget read access
+5. `backend/database/migrations/rag_tables.sql` — document chunks + vector search function
+6. `backend/database/migrations/embed_public_access.sql` — secure public embed access policies
+7. `backend/database/migrations/api_rate_limits.sql` — database-backed daily API rate limiting
+8. `backend/database/migrations/multitenant_policy_hardening.sql` — strict cross-tenant ownership checks
 
 ### 4. Start the development servers
 
@@ -131,7 +131,7 @@ The widget loads `chatbot-widget.js` and accepts a `data-chatbot-id` attribute.
 
 ## Production notes
 
-- Daily message rate limiting is database-backed. Run `database/migrations/api_rate_limits.sql` before production traffic.
+- Daily message rate limiting is database-backed. Run `backend/database/migrations/api_rate_limits.sql` before production traffic.
 - Set `VITE_BACKEND_URL` to your deployed backend URL when building for production.
 - Set `CORS_ALLOWED_ORIGINS` to your exact production frontend/widget origins.
 - Set `VITE_ADMIN_EMAILS` (comma-separated) so only your platform admins can access admin-only pages.
