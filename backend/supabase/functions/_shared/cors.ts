@@ -1,6 +1,10 @@
+// @deno-types="https://deno.land/x/deno@v1.40.0/deno.d.ts"
+// @ts-ignore - Deno global available in Supabase Edge Runtime
+/// <reference lib="deno.window" />
+
 const rawAllowlist = (Deno.env.get("CORS_ALLOWED_ORIGINS") || "")
   .split(",")
-  .map((value) => value.trim())
+  .map((value: string) => value.trim())
   .filter(Boolean);
 
 function normalizeHost(value: string) {
@@ -31,7 +35,7 @@ function originMatchesAllowed(origin: string, allowed: string) {
 export function isAllowedOrigin(origin: string | null, requirePresent = false): boolean {
   if (!origin) return !requirePresent;
   if (rawAllowlist.length === 0) return false;
-  return rawAllowlist.some((allowed) => originMatchesAllowed(origin, allowed));
+  return rawAllowlist.some((allowed: string) => originMatchesAllowed(origin, allowed));
 }
 
 export function buildCorsHeaders(req: Request) {

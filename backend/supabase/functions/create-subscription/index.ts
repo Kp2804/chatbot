@@ -1,3 +1,4 @@
+// @ts-ignore - Deno global available in Supabase Edge Runtime
 import { buildCorsHeaders, isAllowedOrigin } from "../_shared/cors.ts";
 import { requireUser, supabaseAdmin } from "../_shared/auth.ts";
 import { createRazorpaySubscription, getRazorpayKeyId, isBillingTestMode } from "../_shared/razorpay.ts";
