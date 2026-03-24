@@ -11,6 +11,7 @@ import { motion } from "motion/react";
 import { useNavigate } from "react-router";
 import { supabase } from "../../../lib/supabase";
 import { fetchBillingState } from "../billing/billingApi";
+import { useUserRole } from "../../hooks/useUserRole";
 
 /* ─── Types ─── */
 
@@ -144,7 +145,9 @@ const ACTIVE_SUBSCRIPTION_STATUSES = new Set(["active", "past_due", "trialing"])
 
 export function WorkflowInterface() {
   const navigate = useNavigate();
-  const activeChatbotId = localStorage.getItem("activeChatbotId");
+  const { isCustomer } = useUserRole();
+  const storedChatbotId = localStorage.getItem("activeChatbotId");
+  const activeChatbotId = isCustomer ? null : storedChatbotId;
   const hasActiveChatbot = Boolean(activeChatbotId);
   const previewSectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [workflows, setWorkflows] = useState<Workflow[]>([]);

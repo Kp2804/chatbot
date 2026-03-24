@@ -177,6 +177,16 @@ export function Layout() {
   useEffect(() => {
     if (!user?.id) return;
 
+    const lastAuthUserId = localStorage.getItem("lastAuthUserId");
+    if (lastAuthUserId && lastAuthUserId !== user.id) {
+      localStorage.removeItem("activeChatbotId");
+    }
+    localStorage.setItem("lastAuthUserId", user.id);
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+
     const channel = supabase.channel(`user-notifications:${user.id}`);
 
     channel
@@ -232,6 +242,8 @@ export function Layout() {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
+    localStorage.removeItem("activeChatbotId");
+    localStorage.removeItem("lastAuthUserId");
     navigate("/auth");
   };
 

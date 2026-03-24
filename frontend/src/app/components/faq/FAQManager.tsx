@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { supabase } from "../../../lib/supabase";
 import { fetchBillingState } from "../billing/billingApi";
+import { useUserRole } from "../../hooks/useUserRole";
 
 interface FAQ {
   id: string;
@@ -103,7 +104,9 @@ function ConfirmModal({ title, message, onConfirm, onCancel }: ConfirmModalProps
 
 export function FAQManager() {
   const navigate = useNavigate();
-  const activeChatbotId = localStorage.getItem("activeChatbotId");
+  const { isCustomer } = useUserRole();
+  const storedChatbotId = localStorage.getItem("activeChatbotId");
+  const activeChatbotId = isCustomer ? null : storedChatbotId;
   const hasActiveChatbot = Boolean(activeChatbotId);
   const [faqList, setFaqList] = useState<FAQ[]>([]);
   const [loading, setLoading] = useState(true);
