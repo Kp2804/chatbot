@@ -83,7 +83,7 @@ const router = createBrowserRouter([
       {
         path: "workflows/:id",
         element: (
-          <RoleProtectedRoute allow={["admin", "superadmin"]}>
+          <RoleProtectedRoute allow={["customer", "admin", "superadmin"]}>
             <WorkflowEditor />
           </RoleProtectedRoute>
         ),
@@ -92,7 +92,7 @@ const router = createBrowserRouter([
       {
         path: "faq/:id",
         element: (
-          <RoleProtectedRoute allow={["admin", "superadmin"]}>
+          <RoleProtectedRoute allow={["customer", "admin", "superadmin"]}>
             <FAQEditor />
           </RoleProtectedRoute>
         ),
