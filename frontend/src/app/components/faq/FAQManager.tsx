@@ -104,8 +104,7 @@ function ConfirmModal({ title, message, onConfirm, onCancel }: ConfirmModalProps
 
 export function FAQManager() {
   const navigate = useNavigate();
-  const { role } = useUserRole();
-  const isAdminOrSuper = role === 'admin' || role === 'superadmin';
+  const { loading: roleLoading, isAdmin } = useUserRole();
   const activeChatbotId = localStorage.getItem("activeChatbotId");
   const hasActiveChatbot = Boolean(activeChatbotId);
   const [faqList, setFaqList] = useState<FAQ[]>([]);
@@ -122,13 +121,18 @@ export function FAQManager() {
   useEffect(() => {
     const loadBillingState = async () => {
       try {
-        // Admins and superadmins bypass subscription checks
-        if (isAdminOrSuper) {
+        if (roleLoading) {
+          setBillingLoaded(false);
+          return;
+        }
+
+        // Admins bypass subscription checks.
+        if (isAdmin) {
           setHasActivePlan(true);
           setBillingLoaded(true);
           return;
         }
-        
+
         const { data: userData } = await supabase.auth.getUser();
         if (userData.user) {
           const billingState = await fetchBillingState(userData.user.id);
@@ -144,7 +148,9 @@ export function FAQManager() {
       }
     };
     loadBillingState();
-  }, [isAdminOrSuper]);
+  }, [roleLoading, isAdmin]);
+
+  const canManageFaqs = isAdmin || hasActivePlan;
 
   useEffect(() => {
     if (!activeChatbotId) return;
@@ -185,7 +191,7 @@ export function FAQManager() {
   });
 
   const toggleFeatured = async (id: string, current: boolean) => {
-    if (!hasActivePlan) {
+    if (!canManageFaqs) {
       showToast("Editing requires an active plan", "info");
       return;
     }
@@ -203,7 +209,7 @@ export function FAQManager() {
   };
 
   const deleteFaq = async (id: string) => {
-    if (!hasActivePlan) {
+    if (!canManageFaqs) {
       showToast("Deleting FAQs requires an active plan", "info");
       return;
     }
@@ -224,7 +230,7 @@ export function FAQManager() {
   };
 
   const duplicateFaq = async (faq: FAQ) => {
-    if (!hasActivePlan) {
+    if (!canManageFaqs) {
       showToast("Creating FAQs requires an active plan", "info");
       return;
     }
@@ -333,7 +339,7 @@ export function FAQManager() {
       return;
     }
 
-    if (!hasActivePlan) {
+    if (!canManageFaqs) {
       showToast("Creating FAQs requires an active plan", "info");
       return;
     }
@@ -345,7 +351,7 @@ export function FAQManager() {
   const draftCount = faqList.filter((f) => f.status === "draft").length;
   const totalViews = faqList.reduce((sum, f) => sum + f.views, 0);
 
-  if (billingLoaded && !hasActivePlan) {
+  if (!roleLoading && billingLoaded && !canManageFaqs) {
     return (
       <div className="h-full flex items-center justify-center bg-gray-50 dark:bg-[#08080c]">
         <div className="max-w-md text-center">
@@ -411,7 +417,7 @@ export function FAQManager() {
               className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-violet-500 to-indigo-600 hover:from-violet-600 hover:to-indigo-700 text-white rounded-xl transition-all shadow-lg shadow-violet-500/25"
               style={{ fontSize: "0.875rem", fontWeight: 600 }}
             >
-              {hasActiveChatbot && hasActivePlan ? <Plus className="w-4 h-4" /> : <Lock className="w-4 h-4" />} {hasActiveChatbot ? (hasActivePlan ? "Add FAQ" : "Plan Required") : "Select Chatbot to Add FAQ"}
+              {hasActiveChatbot && canManageFaqs ? <Plus className="w-4 h-4" /> : <Lock className="w-4 h-4" />} {hasActiveChatbot ? (canManageFaqs ? "Add FAQ" : "Plan Required") : "Select Chatbot to Add FAQ"}
             </button>
           </div>
         </div>

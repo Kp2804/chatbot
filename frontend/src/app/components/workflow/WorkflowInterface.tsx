@@ -145,8 +145,7 @@ const ACTIVE_SUBSCRIPTION_STATUSES = new Set(["active", "past_due", "trialing"])
 
 export function WorkflowInterface() {
   const navigate = useNavigate();
-  const { role } = useUserRole();
-  const isAdminOrSuper = role === 'admin' || role === 'superadmin';
+  const { loading: roleLoading, isAdmin } = useUserRole();
   const activeChatbotId = localStorage.getItem("activeChatbotId");
   const hasActiveChatbot = Boolean(activeChatbotId);
   const previewSectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -164,13 +163,18 @@ export function WorkflowInterface() {
   useEffect(() => {
     const loadBillingState = async () => {
       try {
-        // Admins and superadmins bypass subscription checks
-        if (isAdminOrSuper) {
+        if (roleLoading) {
+          setBillingLoaded(false);
+          return;
+        }
+
+        // Admins bypass subscription checks.
+        if (isAdmin) {
           setHasActivePlan(true);
           setBillingLoaded(true);
           return;
         }
-        
+
         const { data: userData } = await supabase.auth.getUser();
         if (userData.user) {
           const billingState = await fetchBillingState(userData.user.id);
@@ -186,7 +190,9 @@ export function WorkflowInterface() {
       }
     };
     loadBillingState();
-  }, [isAdminOrSuper]);
+  }, [roleLoading, isAdmin]);
+
+  const canManageWorkflows = isAdmin || hasActivePlan;
 
   useEffect(() => {
     if (!activeChatbotId) return;
@@ -227,7 +233,7 @@ export function WorkflowInterface() {
 
 
   const handleDuplicate = async (wf: Workflow) => {
-    if (!hasActivePlan) {
+    if (!canManageWorkflows) {
       showToast("Duplicate workflow requires an active plan", "info");
       return;
     }
@@ -266,7 +272,7 @@ export function WorkflowInterface() {
   };
 
   const handleToggleStatus = async (id: string, currentStatus: string) => {
-    if (!hasActivePlan) {
+    if (!canManageWorkflows) {
       showToast("Saving workflow status requires an active plan", "info");
       return;
     }
@@ -286,7 +292,7 @@ export function WorkflowInterface() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!hasActivePlan) {
+    if (!canManageWorkflows) {
       showToast("Deleting workflows requires an active plan", "info");
       return;
     }
@@ -332,7 +338,7 @@ export function WorkflowInterface() {
     setPreviewModeByWorkflow((prev) => ({ ...prev, [workflowId]: mode }));
   };
 
-  if (billingLoaded && !hasActivePlan) {
+  if (!roleLoading && billingLoaded && !canManageWorkflows) {
     return (
       <div className="h-full flex items-center justify-center bg-gray-50 dark:bg-[#08080c]">
         <div className="max-w-md text-center">
