@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { supabase } from "../../../lib/supabase";
 import { fetchBillingState } from "../billing/billingApi";
+import { useUserRole } from "../../hooks/useUserRole";
 
 interface FAQ {
   id: string;
@@ -103,6 +104,8 @@ function ConfirmModal({ title, message, onConfirm, onCancel }: ConfirmModalProps
 
 export function FAQManager() {
   const navigate = useNavigate();
+  const { role } = useUserRole();
+  const isAdminOrSuper = role === 'admin' || role === 'superadmin';
   const activeChatbotId = localStorage.getItem("activeChatbotId");
   const hasActiveChatbot = Boolean(activeChatbotId);
   const [faqList, setFaqList] = useState<FAQ[]>([]);
@@ -119,6 +122,13 @@ export function FAQManager() {
   useEffect(() => {
     const loadBillingState = async () => {
       try {
+        // Admins and superadmins bypass subscription checks
+        if (isAdminOrSuper) {
+          setHasActivePlan(true);
+          setBillingLoaded(true);
+          return;
+        }
+        
         const { data: userData } = await supabase.auth.getUser();
         if (userData.user) {
           const billingState = await fetchBillingState(userData.user.id);
@@ -134,7 +144,7 @@ export function FAQManager() {
       }
     };
     loadBillingState();
-  }, []);
+  }, [isAdminOrSuper]);
 
   useEffect(() => {
     if (!activeChatbotId) return;
