@@ -16,7 +16,7 @@
     console.error("[Chatbot Widget] Missing data-chatbot-id attribute");
     return;
   }
-
+  // Basic validation for appUrl
   const WEBSITE_SCHEME = {
     light: {
       panelBg: "#ffffff",
