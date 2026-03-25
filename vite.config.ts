@@ -16,6 +16,8 @@ export default defineConfig({
       '@': path.resolve(__dirname, './frontend/src'),
     },
   },
+  // Serve static assets from frontend/public (including chatbot-widget.js)
+  publicDir: path.resolve(__dirname, './frontend/public'),
 
   // File types to support raw imports. Never add .css, .tsx, or .ts files to this.
   assetsInclude: ['**/*.svg', '**/*.csv'],
